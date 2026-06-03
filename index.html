@@ -1,0 +1,1638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OraMarket — 中国预言机</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#1E40AF;--blue-l:#3B82F6;--blue-d:#1E3A8A;
+  --red:#DC2626;--red-l:#EF4444;
+  --green:#16A34A;--purple:#7C3AED;--amber:#D97706;
+  --bg:#EEF2F7;--card:#fff;--border:#E2E8F0;
+  --text:#1E3A8A;--text2:#475569;--muted:#94A3B8;
+}
+body{font-family:'Fira Sans',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+
+/* ── HEADER ── */
+header{position:sticky;top:0;z-index:1000;background:var(--blue-d);border-bottom:2px solid var(--red)}
+.h-inner{max-width:1400px;margin:0 auto;padding:0 24px;display:flex;align-items:center;height:58px;gap:16px}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
+.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,var(--red),#FF6060);border-radius:8px;display:flex;align-items:center;justify-content:center}
+.logo-text{font-family:'Fira Code',monospace;font-weight:700;font-size:19px;color:#fff}
+.logo-text em{color:#FCA5A5;font-style:normal}
+.search-wrap{flex:1;max-width:460px;position:relative}
+.search-wrap input{width:100%;height:36px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:0 38px 0 13px;color:#fff;font-family:inherit;font-size:13.5px;outline:none;transition:.2s}
+.search-wrap input::placeholder{color:rgba(255,255,255,.45)}
+.search-wrap input:focus{background:rgba(255,255,255,.16);border-color:var(--blue-l);box-shadow:0 0 0 3px rgba(59,130,246,.3)}
+.search-icon{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.45);pointer-events:none}
+.h-actions{display:flex;gap:9px;margin-left:auto;flex-shrink:0}
+.btn-ln{padding:6px 16px;border:1px solid rgba(255,255,255,.3);border-radius:6px;color:#fff;font:500 13px 'Fira Sans',sans-serif;background:transparent;cursor:pointer;transition:.2s}
+.btn-ln:hover{background:rgba(255,255,255,.1)}
+.btn-rg{padding:6px 16px;border:none;border-radius:6px;background:var(--red);color:#fff;font:600 13px 'Fira Sans',sans-serif;cursor:pointer;transition:.2s}
+.btn-rg:hover{background:var(--red-l);transform:translateY(-1px);box-shadow:0 4px 12px rgba(220,38,38,.4)}
+
+/* ── NAV ── */
+nav.mnav{background:var(--blue);border-bottom:1px solid rgba(255,255,255,.12)}
+.n-inner{max-width:1400px;margin:0 auto;padding:0 24px;display:flex;align-items:center;height:42px;gap:2px}
+.n-div{width:1px;height:18px;background:rgba(255,255,255,.25);margin:0 6px}
+.nitem{padding:5px 13px;color:rgba(255,255,255,.78);font-size:13px;font-weight:500;cursor:pointer;border-radius:4px;border:none;background:transparent;font-family:inherit;transition:.2s;white-space:nowrap}
+.nitem:hover,.nitem.active{color:#fff;background:rgba(255,255,255,.15)}
+.nitem.hot{color:#FCD34D;font-weight:700;display:flex;align-items:center;gap:5px}
+.nitem.hot svg{width:12px;height:12px;fill:#FCD34D}
+
+/* ── MARQUEE ── */
+.mq-bar{background:linear-gradient(90deg,#162B5E,#1a3a7a,#162B5E);border-bottom:1px solid rgba(59,130,246,.25);overflow:hidden;position:relative;height:34px;display:flex;align-items:center}
+.mq-bar::before,.mq-bar::after{content:'';position:absolute;top:0;width:70px;height:100%;z-index:2}
+.mq-bar::before{left:0;background:linear-gradient(to right,#162B5E,transparent)}
+.mq-bar::after{right:0;background:linear-gradient(to left,#162B5E,transparent)}
+.mq-label{position:absolute;left:0;top:0;height:100%;display:flex;align-items:center;padding:0 12px;background:var(--red);color:#fff;font-size:11px;font-weight:700;z-index:3;letter-spacing:.6px;white-space:nowrap}
+.mq-track{display:flex;animation:mqScroll 80s linear infinite;padding-left:90px;align-items:center}
+.mq-track:hover{animation-play-state:paused}
+.mq-item{white-space:nowrap;padding:0 36px;color:rgba(255,255,255,.85);font-size:12.5px;font-family:'Fira Code',monospace}
+.mq-item .w{color:#FCD34D;font-weight:600}
+.mq-item .p{color:#34D399;font-weight:700}
+.mq-sep{color:rgba(255,255,255,.25);padding:0 8px}
+@keyframes mqScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+/* ── CONTAINER ── */
+.wrap{max-width:1400px;margin:0 auto;padding:0 24px}
+
+/* ── STATS ── */
+.stats-sec{padding:18px 0 10px}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.s-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;position:relative;overflow:hidden;cursor:pointer;transition:.25s}
+.s-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(30,64,175,.12);border-color:var(--blue-l)}
+.s-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--blue),var(--blue-l))}
+.s-card:nth-child(2)::before{background:linear-gradient(90deg,var(--red),#F87171)}
+.s-card:nth-child(3)::before{background:linear-gradient(90deg,var(--green),#4ADE80)}
+.s-card:nth-child(4)::before{background:linear-gradient(90deg,var(--purple),#A78BFA)}
+.s-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px}
+.s-lbl{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.s-ico{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center}
+.s-val{font-family:'Fira Code',monospace;font-size:24px;font-weight:700;color:var(--blue-d);line-height:1;margin-bottom:5px}
+.s-chg{display:flex;align-items:center;gap:5px;font-size:11.5px;margin-bottom:8px}
+.s-inc{color:var(--green);font-weight:600;font-family:'Fira Code',monospace}
+.s-unit{color:var(--muted)}
+.s-chart{height:46px}
+
+/* ── SECTION TITLE ── */
+.sec-title{font-size:13.5px;font-weight:700;color:var(--blue-d);text-transform:uppercase;letter-spacing:.8px;display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.sec-title::before{content:'';display:block;width:4px;height:15px;background:var(--red);border-radius:2px;flex-shrink:0}
+
+/* ── FEATURED LAYOUT ── */
+.feat-sec{padding:6px 0 16px}
+.feat-layout{display:grid;grid-template-columns:1fr 290px;gap:18px;align-items:start}
+
+/* Carousel */
+.carousel{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;position:relative;min-height:220px;display:flex;flex-direction:column}
+.c-slide{display:none;padding:22px 24px;flex-direction:column;gap:16px}
+.c-slide.active{display:flex;flex:1;flex-direction:column}
+.c-info{display:flex;flex-direction:column;min-width:0}
+.vote-col{justify-content:center}
+.c-body{display:flex;gap:24px;align-items:stretch;flex:1}
+.c-title{font-size:33px;font-weight:700;color:var(--blue-d);line-height:1.2;margin-bottom:4px;padding-right:72px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.c-meta{display:flex;gap:14px;font-size:11.5px;color:var(--muted);margin-bottom:12px;flex-wrap:wrap}
+.c-pool-val{font-family:'Fira Code',monospace;color:var(--blue);font-weight:600}
+.c-tags{display:flex;gap:5px;flex-wrap:wrap}
+.c-tag{font-size:10.5px;padding:2px 8px;border-radius:10px;background:rgba(30,64,175,.08);color:var(--blue);font-weight:500}
+
+/* Vote Area (left column of body) */
+.c-votes{display:flex;flex-direction:column;gap:18px;width:240px;flex-shrink:0;justify-content:center}
+.v-opt{margin-bottom:0}
+.v-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+.v-lbl{font-size:18px;font-weight:700;letter-spacing:1px}
+.v-lbl.y{color:#2563EB}.v-lbl.n{color:var(--red)}
+.v-odds{font-family:'Fira Code',monospace;font-size:15px;color:var(--muted);margin-bottom:6px}
+.v-pct{font-family:'Fira Code',monospace;font-size:33px;font-weight:700;line-height:1}
+.v-pct.y{color:#2563EB}.v-pct.n{color:var(--red)}
+.v-bar{height:11px;background:#E2E8F0;border-radius:6px;overflow:hidden;margin-top:0}
+.v-fill{height:100%;border-radius:6px;transition:width .8s ease}
+.v-fill.y{background:#2563EB}.v-fill.n{background:var(--red)}
+
+/* Chart Area (right column of body) */
+.chart-col{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
+.c-trend{flex:1;min-height:216px;width:100%;position:relative;margin-top:0;padding:8px;border:1px solid var(--border);border-radius:8px}
+.chart-overlay{position:absolute;top:10px;right:10px;z-index:5;background:rgba(255,255,255,0.96);padding:6px 10px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.1);font-size:11px;pointer-events:none}
+.chart-overlay-row{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px}
+.chart-overlay-row:last-child{margin-bottom:0}
+.co-lbl{font-weight:700}.co-lbl.y{color:#2563EB}.co-lbl.n{color:var(--red)}
+.co-val{font-family:'Fira Code',monospace;font-weight:600}
+
+/* Marquee Comments */
+.c-comments{margin-top:0;background:rgba(30,64,175,.04);padding:10px 14px;border-radius:8px;overflow:hidden;position:relative;height:42px;display:flex;align-items:center}
+.cc-track{display:flex;gap:30px;white-space:nowrap;animation:scrollLeft 15s linear infinite}
+.cc-item{font-size:12.5px;color:var(--blue-d);display:flex;align-items:center;gap:6px}
+.cc-item b{color:var(--blue)}
+@keyframes scrollLeft{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.v-fill.y{background:#2563EB}.v-fill.n{background:var(--red)}
+
+/* Carousel controls */
+.c-dots{display:flex;justify-content:center;gap:5px;padding:10px;border-top:1px solid var(--border);background:#FAFBFF}
+.c-dot{width:7px;height:7px;border-radius:50%;background:var(--border);cursor:pointer;border:none;transition:.2s}
+.c-dot.active{background:var(--blue);transform:scale(1.3)}
+.c-nav{position:absolute;top:16px;right:16px;z-index:6;display:flex;gap:8px}
+.c-btn{width:28px;height:28px;border-radius:50%;background:rgba(30,64,175,.85);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s}
+.c-btn:hover{background:var(--blue);transform:scale(1.1)}
+
+/* Sidebar panels */
+.feat-sidebar{display:flex;flex-direction:column;gap:12px}
+.s-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.p-head{background:var(--blue);padding:9px 14px;display:flex;justify-content:space-between;align-items:center}
+.p-title{color:#fff;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.p-more{color:rgba(255,255,255,.65);font-size:12px;cursor:pointer;transition:.2s}
+.p-more:hover{color:#fff}
+/* Unified sidebar survey list */
+.side-list{}
+.side-survey{padding:6.6px 7px 6.6px 11px;border-bottom:1px solid var(--border);cursor:pointer;transition:.2s}
+.side-survey:last-child{border:none}
+.side-survey:hover{background:#F8FAFF;border-color:var(--blue-l)}
+.side-ttl{font-size:12.5px;color:var(--blue-d);font-weight:600;line-height:1.4;margin-bottom:2px}
+.side-opts{display:flex;justify-content:flex-start;align-items:center;gap:16px}
+.s-opt{display:flex;align-items:center;gap:6px;font-size:11.5px}
+.so-lbl{font-weight:700}
+.so-pct{font-family:'Fira Code',monospace;font-weight:700}
+.so-odds{color:var(--muted);font-size:10.5px}
+.s-opt.y .so-lbl,.s-opt.y .so-pct{color:#2563EB}
+.s-opt.n .so-lbl,.s-opt.n .so-pct{color:var(--red)}
+
+/* ── CONTENT LAYOUT ── */
+.content-sec{padding:4px 0 28px}
+.content-layout{display:grid;grid-template-columns:1fr 290px;gap:18px;align-items:start}
+
+/* Filter tags */
+.filter-row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.f-tag{padding:4px 13px;border-radius:20px;font-size:12.5px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text2);transition:.2s;font-family:inherit}
+.f-tag:hover{border-color:var(--blue-l);color:var(--blue)}
+.f-tag.active{background:var(--blue);border-color:var(--blue);color:#fff}
+
+/* Card Grid */
+.card-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.pred-card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:13px;cursor:pointer;transition:.25s;position:relative;overflow:hidden}
+.pred-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--blue),var(--blue-l));transform:scaleX(0);transform-origin:left;transition:.3s}
+.pred-card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(30,64,175,.13);border-color:var(--blue-l)}
+.pred-card:hover::before{transform:scaleX(1)}
+.pc-title{font-size:12.5px;font-weight:600;color:var(--blue-d);line-height:1.4;margin-bottom:9px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pc-pool{display:flex;align-items:center;gap:4px;margin-bottom:8px}
+.pc-pool-n{font-family:'Fira Code',monospace;font-size:12.5px;font-weight:600;color:var(--blue)}
+.pc-pool-l{font-size:10.5px;color:var(--muted)}
+.pc-vote{margin-bottom:8px}
+.pc-vrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+.pc-vlbl{display:flex;align-items:center;gap:5px}
+.pc-vtag{font-size:10.5px;font-weight:700;letter-spacing:.5px}
+.pc-vtag.y{color:#2563EB}.pc-vtag.n{color:var(--red)}
+.pc-vodds{font-size:9.5px;color:var(--muted)}
+.pc-vpct{font-family:'Fira Code',monospace;font-size:14px;font-weight:700}
+.pc-vpct.y{color:#2563EB}.pc-vpct.n{color:var(--red)}
+.pc-bar{height:4px;background:#E2E8F0;border-radius:2px;overflow:hidden;margin-bottom:3px}
+.pc-bary{height:100%;border-radius:2px;background:#2563EB}
+.pc-parts{display:flex;align-items:center;gap:5px;margin-bottom:7px}
+.av-stack{display:flex}
+.av{width:18px;height:18px;border-radius:50%;border:1.5px solid #fff;margin-left:-5px;font-size:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;flex-shrink:0}
+.av:first-child{margin-left:0}
+.pc-cnt{font-size:11.5px;color:var(--text2);font-weight:500}
+.pc-tags{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:7px}
+.pc-tag{font-size:9.5px;padding:1.5px 6px;border-radius:9px;background:rgba(30,64,175,.07);color:var(--blue);font-weight:500}
+.pc-foot{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);border-top:1px solid var(--border);padding-top:6px;margin-top:2px}
+.pc-dl{color:var(--red);font-family:'Fira Code',monospace;font-weight:600}
+.pc-pub{font-family:'Fira Code',monospace}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.pred-card{animation:fadeUp .35s ease forwards}
+
+/* Load indicator */
+.load-ind{text-align:center;padding:18px;color:var(--muted);font-size:13px}
+.spinner{width:22px;height:22px;border:2.5px solid rgba(30,64,175,.2);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── RIGHT SIDEBAR ── */
+.r-sidebar{display:flex;flex-direction:column;gap:14px}
+
+/* Activity Banner */
+.act-banner{background:linear-gradient(135deg,var(--blue-d),#1a3a9a);border-radius:11px;padding:18px;position:relative;overflow:hidden;cursor:pointer;transition:.2s;border:1px solid rgba(255,255,255,.08)}
+.act-banner:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(30,64,175,.3)}
+.ab-glow{position:absolute;inset:0;background:radial-gradient(circle at 85% 15%,rgba(220,38,38,.35) 0%,transparent 55%)}
+.ab-body{position:relative;z-index:1}
+.ab-tag{display:inline-block;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-bottom:7px;text-transform:uppercase;letter-spacing:.5px}
+.ab-title{color:#fff;font-size:14.5px;font-weight:700;line-height:1.4;margin-bottom:6px}
+.ab-desc{color:rgba(255,255,255,.7);font-size:11.5px;line-height:1.55;margin-bottom:12px}
+.ab-cta{display:inline-flex;align-items:center;gap:7px;background:var(--red);color:#fff;padding:7px 14px;border-radius:6px;font-size:12.5px;font-weight:600;transition:.2s}
+.ab-cta:hover{background:var(--red-l)}
+
+/* Leaderboard */
+.lb-panel{background:var(--card);border:1px solid var(--border);border-radius:11px;overflow:hidden}
+.lb-head{background:var(--blue-d);padding:11px 14px}
+.lb-ttl{color:#fff;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.lb-tabs{display:flex;gap:3px}
+.lb-tab{padding:3px 9px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;color:rgba(255,255,255,.55);border:none;background:transparent;font-family:inherit;transition:.2s}
+.lb-tab:hover{color:#fff}
+.lb-tab.active{background:rgba(255,255,255,.18);color:#fff}
+.lb-list{padding:6px 0}
+.lb-item{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid #F1F5F9;transition:.2s;cursor:pointer}
+.lb-item:last-child{border:none}
+.lb-item:hover{background:#F8FAFF}
+.lb-rank{width:20px;text-align:center;font-size:12px;font-weight:700;color:var(--muted);font-family:'Fira Code',monospace;flex-shrink:0}
+.lb-rank.g{color:#F59E0B}.lb-rank.s{color:#94A3B8}.lb-rank.b{color:#D97706}
+.lb-av{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}
+.lb-user{flex:1;min-width:0}
+.lb-name{font-size:11.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-acc{font-size:10px;color:var(--muted)}
+.lb-pts{font-family:'Fira Code',monospace;font-size:11.5px;font-weight:700;color:var(--green);flex-shrink:0}
+
+/* ── REGION PANEL ── */
+.region-panel{background:var(--card);border:1px solid var(--border);border-radius:11px;overflow:hidden}
+.region-head{background:var(--blue-d);padding:11px 14px}
+.region-ttl{color:#fff;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.region-body{padding:14px}
+.region-item{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.region-item:last-child{margin-bottom:0}
+.r-info{display:flex;justify-content:space-between;align-items:center}
+.r-name{font-size:12.5px;font-weight:600;color:var(--text)}
+.r-pct{font-size:12.5px;font-weight:700;color:var(--blue)}
+.r-bar-wrap{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;position:relative}
+.r-bar{height:100%;background:linear-gradient(90deg, #3B82F6, #60A5FA);border-radius:3px;transition:width 1s ease-out}
+.r-stat{font-size:11px;color:var(--muted);text-align:right}
+
+/* ── stats pct badge ── */
+.s-pct{margin-left:auto;font-family:'Fira Code',monospace;font-size:10px;font-weight:700;color:var(--green);background:rgba(22,163,74,.1);padding:1px 6px;border-radius:5px}
+
+/* ── featured height match ── */
+.feat-layout{align-items:stretch}
+.feat-left{display:flex;flex-direction:column;min-width:0}
+.feat-left .carousel{flex:1}
+.feat-sidebar{height:100%}
+.feat-sidebar .s-panel:first-child{flex:1;display:flex;flex-direction:column}
+.feat-sidebar .s-panel:first-child .latest-list{flex:1}
+
+/* 3 hot survey topics row */
+.topic-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.topic-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:13px 14px;cursor:pointer;transition:.25s;position:relative;overflow:hidden}
+.topic-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,var(--blue),var(--blue-l));transform:scaleX(0);transform-origin:left;transition:.3s}
+.topic-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(30,64,175,.12);border-color:var(--blue-l)}
+.topic-card:hover::before{transform:scaleX(1)}
+.tc-head{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+.tc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tc-name{font-size:12.5px;font-weight:600;color:var(--blue-d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tc-pool{font-family:'Fira Code',monospace;font-size:19px;font-weight:700;color:var(--blue);line-height:1;display:flex;align-items:baseline;gap:5px;margin-bottom:8px}
+.tc-pool span{font-family:'Fira Sans',sans-serif;font-size:10px;font-weight:500;color:var(--muted)}
+.tc-stat{display:flex;align-items:center;justify-content:space-between}
+.tc-inc{font-family:'Fira Code',monospace;font-size:12px;font-weight:600;color:var(--green)}
+.tc-pct{font-size:10.5px;font-weight:700;color:var(--green);background:rgba(22,163,74,.1);padding:1px 7px;border-radius:5px}
+
+/* leaderboard metric tabs */
+.lb-mtabs{display:flex;gap:4px;margin-bottom:8px}
+.lb-mtab{flex:1;padding:4px 0;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.18);background:transparent;font-family:inherit;transition:.2s}
+.lb-mtab:hover{color:#fff;border-color:rgba(255,255,255,.4)}
+.lb-mtab.active{background:var(--red);border-color:var(--red);color:#fff}
+
+/* live redemption stack */
+.live-panel{background:var(--card);border:1px solid var(--border);border-radius:11px;overflow:hidden}
+.live-head{background:var(--blue-d);padding:11px 14px;display:flex;justify-content:space-between;align-items:center}
+.live-head .p-title{color:#fff}
+.live-badge{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:#34D399;text-transform:uppercase;letter-spacing:.5px}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#34D399;animation:livePulse 1.6s infinite}
+@keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 6px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+.live-list{padding:4px 0;max-height:360px;overflow:hidden}
+.live-item{display:flex;gap:9px;padding:8px 13px;border-bottom:1px solid #F1F5F9;align-items:center;transition:opacity .4s,transform .4s;animation:liveFlash 1.3s ease}
+.live-item:last-child{border:none}
+@keyframes liveFlash{0%{background:rgba(34,197,94,.16)}100%{background:transparent}}
+.live-item.enter{opacity:0;transform:translateY(-12px)}
+.li-av{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}
+.li-body{flex:1;min-width:0}
+.li-top{display:flex;justify-content:space-between;align-items:baseline}
+.li-name{font-size:12px;font-weight:600;color:var(--text)}
+.li-time{font-size:9.5px;color:var(--muted);flex-shrink:0;margin-left:6px}
+.li-act{font-size:11px;color:var(--text2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li-act b{color:var(--blue-d);font-weight:600}
+.li-pts{font-family:'Fira Code',monospace;color:var(--green);font-weight:600}
+
+/* ── FOOTER ── */
+footer{background:var(--blue-d);border-top:2px solid var(--red);padding:36px 0 22px}
+.f-grid{display:grid;grid-template-columns:210px 1fr 1fr 170px;gap:28px;padding-bottom:24px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:20px}
+.f-brand .logo{margin-bottom:9px}
+.f-brand p{font-size:12px;color:rgba(255,255,255,.55);line-height:1.65}
+.f-nav h4,.f-soc h4{color:#fff;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:12px}
+.f-nav ul{list-style:none;display:flex;flex-direction:column;gap:7px}
+.f-nav ul li a{color:rgba(255,255,255,.55);text-decoration:none;font-size:12.5px;transition:.2s}
+.f-nav ul li a:hover{color:#fff}
+.soc-icons{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.soc-ic{width:34px;height:34px;border-radius:7px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,.65);transition:.2s}
+.soc-ic:hover{background:var(--blue-l);color:#fff;transform:translateY(-2px)}
+.lang-sel{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:5px 9px;color:#fff;font-size:12.5px;cursor:pointer;outline:none;font-family:inherit;width:100%}
+.f-bottom{display:flex;justify-content:space-between;font-size:11.5px;color:rgba(255,255,255,.35)}
+
+/* ── TECH GLOW PULSE on live stat ── */
+@keyframes techPulse{0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.35)}60%{box-shadow:0 0 0 7px rgba(59,130,246,0)}}
+.s-card:nth-child(1){animation:techPulse 3s ease-in-out infinite}
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<header>
+<div class="h-inner">
+  <a class="logo" href="#">
+    <div class="logo-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="3.5" fill="#fff"/>
+        <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M5.6 5.6l1.77 1.77M16.63 16.63l1.77 1.77M5.6 18.4l1.77-1.77M16.63 7.37l1.77-1.77" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <span class="logo-text">Ora<em>Market</em></span>
+  </a>
+  <div class="search-wrap">
+    <input type="text" data-i18n-placeholder="search_placeholder" placeholder="搜索预测、话题、事件…">
+    <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+  </div>
+  <div class="h-actions">
+    <button class="btn-ln" data-i18n="sign_in">登录</button>
+    <button class="btn-rg" data-i18n="register">注册</button>
+  </div>
+</div>
+</header>
+
+<!-- ══ NAV ══ -->
+<nav class="mnav">
+<div class="n-inner">
+  <button class="nitem hot active" data-i18n="nav_trending">
+    <svg viewBox="0 0 24 24"><path d="M17.66 11.2c-.23-.3-.51-.56-.77-.82-.67-.6-1.43-1.03-2.07-1.66C13.33 7.26 13 4.85 13.95 3c-.95.23-1.78.75-2.49 1.32-2.59 2.04-3.49 5.56-2.46 8.73.04.14.08.27.08.42 0 .28-.18.52-.46.62-.27.1-.56.01-.74-.21a5.27 5.27 0 01-.88-2.31c-1.12 1.52-1.68 3.48-1.49 5.47.12 1.22.57 2.41 1.29 3.39.81 1.08 1.91 1.87 3.17 2.27 1.41.44 2.97.41 4.37-.06 1.6-.54 2.94-1.69 3.67-3.21.78-1.61.87-3.51.18-5.19-.23-.57-.56-1.09-.97-1.55z"/></svg>
+    热门
+  </button>
+  <button class="nitem" data-i18n="nav_latest">最新</button>
+  <div class="n-div"></div>
+  <button class="nitem" data-i18n="nav_public_services">公共服务</button>
+  <button class="nitem" data-i18n="nav_policy_research">政策研究</button>
+  <button class="nitem" data-i18n="nav_satisfaction_survey">满意度调查</button>
+  <button class="nitem" data-i18n="nav_education">教育</button>
+  <button class="nitem" data-i18n="nav_health_medical">健康医疗</button>
+  <button class="nitem" data-i18n="nav_business_survey">商业调查</button>
+  <button class="nitem" data-i18n="nav_personal_enterprise">个人/企业</button>
+</div>
+</nav>
+
+<!-- ══ MARQUEE ══ -->
+<div class="mq-bar">
+  <div class="mq-label" data-i18n="mq_live">实时</div>
+  <div class="mq-track" id="mqTrack">
+    <span class="mq-item"><span class="w">Michael T.</span> won <span class="p">+1,000 pts</span> on Public Healthcare Reform</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Sarah K.</span> won <span class="p">+2,500 pts</span> on Education Budget Vote</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">James W.</span> won <span class="p">+800 pts</span> on Infrastructure Bill Outcome</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Emily R.</span> won <span class="p">+3,200 pts</span> on Climate Policy Forecast</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">David L.</span> won <span class="p">+1,500 pts</span> on Tax Reform Survey</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Anna M.</span> won <span class="p">+950 pts</span> on Housing Policy Approval</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Robert C.</span> won <span class="p">+4,100 pts</span> on National Budget Prediction</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Lisa P.</span> won <span class="p">+1,200 pts</span> on Digital Gov Initiative</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Kevin H.</span> won <span class="p">+2,800 pts</span> on Public Transit Reform</span><span class="mq-sep">|</span>
+    <!-- duplicate for seamless loop -->
+    <span class="mq-item"><span class="w">Michael T.</span> won <span class="p">+1,000 pts</span> on Public Healthcare Reform</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Sarah K.</span> won <span class="p">+2,500 pts</span> on Education Budget Vote</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">James W.</span> won <span class="p">+800 pts</span> on Infrastructure Bill Outcome</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Emily R.</span> won <span class="p">+3,200 pts</span> on Climate Policy Forecast</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">David L.</span> won <span class="p">+1,500 pts</span> on Tax Reform Survey</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Anna M.</span> won <span class="p">+950 pts</span> on Housing Policy Approval</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Robert C.</span> won <span class="p">+4,100 pts</span> on National Budget Prediction</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Lisa P.</span> won <span class="p">+1,200 pts</span> on Digital Gov Initiative</span><span class="mq-sep">|</span>
+    <span class="mq-item"><span class="w">Kevin H.</span> won <span class="p">+2,800 pts</span> on Public Transit Reform</span><span class="mq-sep">|</span>
+  </div>
+</div>
+
+<!-- ══ STATS ══ -->
+<section class="stats-sec">
+<div class="wrap">
+  <div class="stats-grid">
+    <div class="s-card">
+      <div class="s-top"><span class="s-lbl" data-i18n="stat_total_pool">总积分池</span>
+        <div class="s-ico" style="background:rgba(30,64,175,.09)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1E40AF" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+      </div>
+      <div class="s-val" id="sv1">0</div>
+      <div class="s-chg">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="#16A34A"><path d="M7 14l5-5 5 5H7z"/></svg>
+        <span class="s-inc">+1,247/hr</span><span class="s-unit" data-i18n="unit_pts">积分</span><span class="s-pct">▲ 2.4%</span>
+      </div>
+      <div class="s-chart"><canvas id="sc1"></canvas></div>
+    </div>
+    <div class="s-card">
+      <div class="s-top"><span class="s-lbl" data-i18n="stat_24h_volume">24小时积分量</span>
+        <div class="s-ico" style="background:rgba(220,38,38,.09)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DC2626" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+      </div>
+      <div class="s-val" id="sv2">0</div>
+      <div class="s-chg">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="#16A34A"><path d="M7 14l5-5 5 5H7z"/></svg>
+        <span class="s-inc">+892/hr</span><span class="s-unit" data-i18n="unit_pts">积分</span><span class="s-pct">▲ 1.8%</span>
+      </div>
+      <div class="s-chart"><canvas id="sc2"></canvas></div>
+    </div>
+    <div class="s-card">
+      <div class="s-top"><span class="s-lbl" data-i18n="stat_total_predictions">预测总数</span>
+        <div class="s-ico" style="background:rgba(22,163,74,.09)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        </div>
+      </div>
+      <div class="s-val" id="sv3">0</div>
+      <div class="s-chg">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="#16A34A"><path d="M7 14l5-5 5 5H7z"/></svg>
+        <span class="s-inc">+23/hr</span><span class="s-unit" data-i18n="unit_topics">话题</span><span class="s-pct">▲ 0.9%</span>
+      </div>
+      <div class="s-chart"><canvas id="sc3"></canvas></div>
+    </div>
+    <div class="s-card">
+      <div class="s-top"><span class="s-lbl" data-i18n="stat_participants">参与者</span>
+        <div class="s-ico" style="background:rgba(124,58,237,.09)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+      </div>
+      <div class="s-val" id="sv4">0</div>
+      <div class="s-chg">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="#16A34A"><path d="M7 14l5-5 5 5H7z"/></svg>
+        <span class="s-inc">+156/hr</span><span class="s-unit" data-i18n="unit_users">用户</span><span class="s-pct">▲ 3.1%</span>
+      </div>
+      <div class="s-chart"><canvas id="sc4"></canvas></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ══ FEATURED ══ -->
+<section class="feat-sec">
+<div class="wrap">
+  <div class="feat-layout">
+    <!-- LEFT: Carousel + hot topics -->
+    <div class="feat-left">
+      <div class="sec-title" data-i18n="sec_featured">精选预测</div>
+      <div class="carousel">
+        <div class="c-nav">
+          <button class="c-btn" onclick="cPrev()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="c-btn" onclick="cNext()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+        <!-- Slide 1 -->
+        <div class="c-slide active" id="cs0">
+          <div class="c-info">
+            <div class="c-title">Will the National Public Healthcare Reform Bill pass in Q3 2026?</div>
+            <div class="c-meta">
+              <span><span class="c-pool-val">248,000pts</span> pool</span>
+              <span>Published: 2026-05-05</span>
+              <span>Deadline: 2026-09-30</span>
+              <span>2,847 participants</span>
+            </div>
+            <div class="c-tags"><span class="c-tag">Health Policy</span><span class="c-tag">Public Services</span><span class="c-tag">Legislation</span></div>
+          </div>
+          <div class="c-body">
+            <div class="c-votes">
+              <div class="v-opt">
+                <div class="v-row"><span class="v-lbl y">YES</span><span class="v-pct y">67%</span></div>
+                <div class="v-odds">×1.49</div>
+                <div class="v-bar"><div class="v-fill y" style="width:67%"></div></div>
+              </div>
+              <div class="v-opt">
+                <div class="v-row"><span class="v-lbl n">NO</span><span class="v-pct n">33%</span></div>
+                <div class="v-odds">×3.03</div>
+                <div class="v-bar"><div class="v-fill n" style="width:33%"></div></div>
+              </div>
+            </div>
+            <div class="chart-col">
+              <div class="chart-overlay">
+                <div class="chart-overlay-row"><span class="co-lbl y">YES</span><span class="co-val y">67% (1.49x)</span></div>
+                <div class="chart-overlay-row"><span class="co-lbl n">NO</span><span class="co-val n">33% (3.03x)</span></div>
+              </div>
+              <div class="c-trend"><canvas id="ctrend0"></canvas></div>
+            </div>
+          </div>
+          <div class="c-comments"><div class="cc-track">
+            <span class="cc-item"><b>Marcus:</b> I think this will definitely pass!</span>
+            <span class="cc-item"><b>Sarah:</b> The odds for YES are too low right now.</span>
+            <span class="cc-item"><b>Kevin:</b> Strong resistance expected from the private sector...</span>
+            <span class="cc-item"><b>Anna:</b> YES is a lock.</span>
+          </div></div>
+        </div>
+        <!-- Slide 2 -->
+        <div class="c-slide" id="cs1">
+          <div class="c-info">
+            <div class="c-title">Will inflation drop below 3% within the next 6 months?</div>
+            <div class="c-meta"><span><span class="c-pool-val">186,500pts</span> pool</span><span>Published: 2026-06-01</span><span>Deadline: 2026-12-31</span><span>1,923 participants</span></div>
+            <div class="c-tags"><span class="c-tag">Economic Policy</span><span class="c-tag">Policy Research</span></div>
+          </div>
+          <div class="c-body">
+            <div class="c-votes">
+              <div class="v-opt"><div class="v-row"><span class="v-lbl y">YES</span><span class="v-pct y">45%</span></div><div class="v-odds">×2.22</div><div class="v-bar"><div class="v-fill y" style="width:45%"></div></div></div>
+              <div class="v-opt"><div class="v-row"><span class="v-lbl n">NO</span><span class="v-pct n">55%</span></div><div class="v-odds">×1.82</div><div class="v-bar"><div class="v-fill n" style="width:55%"></div></div></div>
+            </div>
+            <div class="chart-col">
+              <div class="chart-overlay">
+                <div class="chart-overlay-row"><span class="co-lbl y">YES</span><span class="co-val y">45% (2.22x)</span></div>
+                <div class="chart-overlay-row"><span class="co-lbl n">NO</span><span class="co-val n">55% (1.82x)</span></div>
+              </div>
+              <div class="c-trend"><canvas id="ctrend1"></canvas></div>
+            </div>
+          </div>
+          <div class="c-comments"><div class="cc-track">
+            <span class="cc-item"><b>David:</b> The Fed looks hawkish.</span>
+            <span class="cc-item"><b>Lisa:</b> Gas prices are going back up...</span>
+            <span class="cc-item"><b>Tom:</b> Wait until the jobs report comes out.</span>
+            <span class="cc-item"><b>Emily:</b> Inflation might stay around 3.5%.</span>
+          </div></div>
+        </div>
+        <!-- Slide 3 -->
+        <div class="c-slide" id="cs2">
+          <div class="c-info">
+            <div class="c-title">Will the education budget increase by 10% in next fiscal year?</div>
+            <div class="c-meta"><span><span class="c-pool-val">142,800pts</span> pool</span><span>Published: 2026-05-20</span><span>Deadline: 2026-11-15</span><span>1,654 participants</span></div>
+            <div class="c-tags"><span class="c-tag">Education</span><span class="c-tag">Budget Policy</span></div>
+          </div>
+          <div class="c-body">
+            <div class="c-votes">
+              <div class="v-opt"><div class="v-row"><span class="v-lbl y">YES</span><span class="v-pct y">52%</span></div><div class="v-odds">×1.92</div><div class="v-bar"><div class="v-fill y" style="width:52%"></div></div></div>
+              <div class="v-opt"><div class="v-row"><span class="v-lbl n">NO</span><span class="v-pct n">48%</span></div><div class="v-odds">×2.08</div><div class="v-bar"><div class="v-fill n" style="width:48%"></div></div></div>
+            </div>
+            <div class="chart-col">
+              <div class="chart-overlay">
+                <div class="chart-overlay-row"><span class="co-lbl y">YES</span><span class="co-val y">52% (1.92x)</span></div>
+                <div class="chart-overlay-row"><span class="co-lbl n">NO</span><span class="co-val n">48% (2.08x)</span></div>
+              </div>
+              <div class="c-trend"><canvas id="ctrend2"></canvas></div>
+            </div>
+          </div>
+          <div class="c-comments"><div class="cc-track">
+            <span class="cc-item"><b>Brian:</b> Teachers' union is pushing hard.</span>
+            <span class="cc-item"><b>Alice:</b> The budget is already too tight.</span>
+            <span class="cc-item"><b>Chris:</b> 10% is a massive jump, unlikely.</span>
+            <span class="cc-item"><b>Diana:</b> Election year, anything can happen.</span>
+          </div></div>
+        </div>
+        <!-- Slide 4 -->
+        <div class="c-slide" id="cs3">
+          <div class="c-info">
+            <div class="c-title">Will remote work become mandatory for all federal government offices by 2027?</div>
+            <div class="c-meta"><span><span class="c-pool-val">98,200pts</span> pool</span><span>Published: 2026-04-15</span><span>Deadline: 2026-10-01</span><span>1,247 participants</span></div>
+            <div class="c-tags"><span class="c-tag">Public Services</span><span class="c-tag">Workplace Policy</span></div>
+          </div>
+          <div class="c-body">
+            <div class="c-votes">
+              <div class="v-opt"><div class="v-row"><span class="v-lbl y">YES</span><span class="v-pct y">38%</span></div><div class="v-odds">×2.63</div><div class="v-bar"><div class="v-fill y" style="width:38%"></div></div></div>
+              <div class="v-opt"><div class="v-row"><span class="v-lbl n">NO</span><span class="v-pct n">62%</span></div><div class="v-odds">×1.61</div><div class="v-bar"><div class="v-fill n" style="width:62%"></div></div></div>
+            </div>
+            <div class="chart-col">
+              <div class="chart-overlay">
+                <div class="chart-overlay-row"><span class="co-lbl y">YES</span><span class="co-val y">38% (2.63x)</span></div>
+                <div class="chart-overlay-row"><span class="co-lbl n">NO</span><span class="co-val n">62% (1.61x)</span></div>
+              </div>
+              <div class="c-trend"><canvas id="ctrend3"></canvas></div>
+            </div>
+          </div>
+          <div class="c-comments"><div class="cc-track">
+            <span class="cc-item"><b>Ethan:</b> They just signed long term leases.</span>
+            <span class="cc-item"><b>Fiona:</b> Hybrid is the future, not full remote.</span>
+            <span class="cc-item"><b>George:</b> Budget cuts might force it!</span>
+            <span class="cc-item"><b>Hannah:</b> Unlikely for secure departments.</span>
+          </div></div>
+        </div>
+        <!-- Slide 5 -->
+        <div class="c-slide" id="cs4">
+          <div class="c-info">
+            <div class="c-title">Will the National Transportation Infrastructure Bill receive bipartisan approval?</div>
+            <div class="c-meta"><span><span class="c-pool-val">312,600pts</span> pool</span><span>Published: 2026-04-01</span><span>Deadline: 2026-08-31</span><span>3,412 participants</span></div>
+            <div class="c-tags"><span class="c-tag">Infrastructure</span><span class="c-tag">Legislation</span><span class="c-tag">Transport</span></div>
+          </div>
+          <div class="c-body">
+            <div class="c-votes">
+              <div class="v-opt"><div class="v-row"><span class="v-lbl y">YES</span><span class="v-pct y">71%</span></div><div class="v-odds">×1.41</div><div class="v-bar"><div class="v-fill y" style="width:71%"></div></div></div>
+              <div class="v-opt"><div class="v-row"><span class="v-lbl n">NO</span><span class="v-pct n">29%</span></div><div class="v-odds">×3.45</div><div class="v-bar"><div class="v-fill n" style="width:29%"></div></div></div>
+            </div>
+            <div class="chart-col">
+              <div class="chart-overlay">
+                <div class="chart-overlay-row"><span class="co-lbl y">YES</span><span class="co-val y">71% (1.41x)</span></div>
+                <div class="chart-overlay-row"><span class="co-lbl n">NO</span><span class="co-val n">29% (3.45x)</span></div>
+              </div>
+              <div class="c-trend"><canvas id="ctrend4"></canvas></div>
+            </div>
+          </div>
+          <div class="c-comments"><div class="cc-track">
+            <span class="cc-item"><b>Ian:</b> Everyone agrees roads need fixing.</span>
+            <span class="cc-item"><b>Julia:</b> Funding source is still contested.</span>
+            <span class="cc-item"><b>Karl:</b> Looks like a done deal to me.</span>
+            <span class="cc-item"><b>Lily:</b> Might pass with minor amendments.</span>
+          </div></div>
+        </div>
+        <!-- Dots -->
+        <div class="c-dots" id="cDots">
+          <button class="c-dot active" onclick="goSlide(0)"></button>
+          <button class="c-dot" onclick="goSlide(1)"></button>
+          <button class="c-dot" onclick="goSlide(2)"></button>
+          <button class="c-dot" onclick="goSlide(3)"></button>
+          <button class="c-dot" onclick="goSlide(4)"></button>
+        </div>
+      </div>
+      <!-- 3 side-by-side hot survey topics (picked from All Predictions tabs) -->
+      <div class="topic-row" id="topicRow"></div>
+    </div>
+
+    <!-- RIGHT: Latest + Hot Topics -->
+    <div class="feat-sidebar">
+      <!-- Latest Surveys -->
+      <div class="s-panel">
+        <div class="p-head"><span class="p-title" data-i18n="panel_latest">最新预测</span><span class="p-more" data-i18n="view_all">查看全部 ›</span></div>
+        <div class="side-list" id="latestList"></div>
+      </div>
+      <!-- Hot Surveys -->
+      <div class="s-panel">
+        <div class="p-head"><span class="p-title" data-i18n="panel_hot_topics">热门话题</span><span class="p-more" data-i18n="view_all">查看全部 ›</span></div>
+        <div class="side-list" id="hotList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ══ CONTENT: Cards + Sidebar ══ -->
+<section class="content-sec">
+<div class="wrap">
+  <div class="content-layout">
+    <!-- Cards (Left side) -->
+    <div>
+      <div class="sec-title" data-i18n="sec_all_predictions">所有预测</div>
+      <div class="filter-row">
+        <button class="f-tag active" data-i18n="filter_all">全部</button>
+        <button class="f-tag" data-i18n="filter_healthcare">医疗改革</button>
+        <button class="f-tag" data-i18n="filter_education">教育政策</button>
+        <button class="f-tag" data-i18n="filter_climate">气候行动</button>
+        <button class="f-tag" data-i18n="filter_tax">税收改革</button>
+        <button class="f-tag" data-i18n="filter_infra">基础设施</button>
+        <button class="f-tag" data-i18n="filter_digital">数字服务</button>
+        <button class="f-tag" data-i18n="filter_safety">公共安全</button>
+        <button class="f-tag" data-i18n="filter_housing">住房</button>
+      </div>
+      <div class="card-grid" id="cardGrid"></div>
+      <div class="load-ind" id="loadInd"><div class="spinner"></div></div>
+      <div class="load-ind" id="allDone" style="display:none" data-i18n="all_loaded">— 所有预测已加载 —</div>
+      <div id="sentinel" style="height:1px"></div>
+    </div>
+
+    <!-- Right sidebar -->
+    <div class="r-sidebar">
+      <!-- Banner -->
+      <div class="act-banner">
+        <div class="ab-glow"></div>
+        <div class="ab-body">
+          <div class="ab-tag" data-i18n="banner_tag">限时活动</div>
+          <div class="ab-title" data-i18n="banner_title">2026 夏季公民挑战赛</div>
+          <div class="ab-desc" data-i18n="banner_desc">正确预测10项政策结果，赢取50万积分奖池份额。前3名获得专属平台徽章。</div>
+          <div class="ab-cta" data-i18n="banner_cta">参加挑战 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+        </div>
+      </div>
+      <!-- Leaderboard -->
+      <div class="lb-panel">
+        <div class="lb-head">
+          <div class="lb-ttl" data-i18n="lb_title">Top 10 排行榜</div>
+          <div class="lb-mtabs">
+            <button class="lb-mtab active" onclick="lbMetric(this,'points')" data-i18n="lb_points_gained">积分增长</button>
+            <button class="lb-mtab" onclick="lbMetric(this,'accuracy')" data-i18n="lb_accuracy">准确率</button>
+          </div>
+          <div class="lb-tabs">
+            <button class="lb-tab active" onclick="lbTab(this,'day')" data-i18n="lb_day">日</button>
+            <button class="lb-tab" onclick="lbTab(this,'week')" data-i18n="lb_week">周</button>
+            <button class="lb-tab" onclick="lbTab(this,'month')" data-i18n="lb_month">月</button>
+            <button class="lb-tab" onclick="lbTab(this,'year')" data-i18n="lb_year">年</button>
+          </div>
+        </div>
+        <div class="lb-list" id="lbList"></div>
+      </div>
+      <!-- Live redemption stack (push-update, newest first) -->
+      <div class="live-panel">
+        <div class="live-head">
+          <span class="p-title" data-i18n="live_redemptions">实时兑换</span>
+          <span class="live-badge"><span class="live-dot"></span> <span data-i18n="live_label">实时</span></span>
+        </div>
+        <div class="live-list" id="liveList"></div>
+      </div>
+      <!-- Region Distribution (Moved here) -->
+      <div class="region-panel">
+        <div class="region-head">
+          <div class="region-ttl" data-i18n="sec_region">参与调研的地区占比</div>
+        </div>
+        <div class="region-body" id="regionGrid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ══ FOOTER ══ -->
+<footer>
+<div class="wrap">
+  <div class="f-grid">
+    <div class="f-brand">
+      <div class="logo">
+        <div class="logo-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.5" fill="#fff"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+        <span class="logo-text">Ora<em>Market</em></span>
+      </div>
+      <p data-i18n="footer_desc">领先的中国预言机，专注政策结果、公众调查与社区预测。</p>
+    </div>
+    <div class="f-nav">
+      <h4 data-i18n="footer_platform">平台</h4>
+      <ul>
+        <li><a href="#" data-i18n="footer_trending">热门预测</a></li>
+        <li><a href="#" data-i18n="footer_public_services">公共服务</a></li>
+        <li><a href="#" data-i18n="footer_policy_research">政策研究</a></li>
+        <li><a href="#" data-i18n="footer_satisfaction">满意度调查</a></li>
+        <li><a href="#" data-i18n="footer_education_survey">教育调查</a></li>
+        <li><a href="#" data-i18n="footer_health">健康医疗</a></li>
+        <li><a href="#" data-i18n="footer_leaderboard">排行榜</a></li>
+      </ul>
+    </div>
+    <div class="f-nav">
+      <h4 data-i18n="footer_support">支持</h4>
+      <ul>
+        <li><a href="#" data-i18n="footer_help">帮助中心</a></li>
+        <li><a href="#" data-i18n="footer_guidelines">社区准则</a></li>
+        <li><a href="#" data-i18n="footer_privacy">隐私政策</a></li>
+        <li><a href="#" data-i18n="footer_terms">服务条款</a></li>
+        <li><a href="#" data-i18n="footer_contact">联系我们</a></li>
+        <li><a href="#" data-i18n="footer_api">API 文档</a></li>
+      </ul>
+    </div>
+    <div class="f-soc">
+      <h4 data-i18n="footer_connect">关注我们</h4>
+      <div class="soc-icons">
+        <div class="soc-ic" title="X / Twitter"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></div>
+        <div class="soc-ic" title="Telegram"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg></div>
+        <div class="soc-ic" title="Discord"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.079.11 18.1.12 18.12a19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg></div>
+        <div class="soc-ic" title="LinkedIn"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></div>
+      </div>
+      <h4 data-i18n="footer_language">语言</h4>
+      <select class="lang-sel" id="langSelect">
+        <option value="zh-CN" selected>简体中文</option>
+        <option value="zh-TW">繁體中文</option>
+        <option value="en">English</option>
+      </select>
+    </div>
+  </div>
+  <div class="f-bottom">
+    <span data-i18n="footer_copyright">© 2026 OraMarket. 保留所有权利。</span>
+    <span data-i18n="footer_powered">由民意数据与社区智慧驱动</span>
+  </div>
+</div>
+</footer>
+
+<script>
+/* ── I18N SYSTEM ── */
+let currentLang = localStorage.getItem('oramarket_lang') || 'zh-CN';
+
+const I18N = {
+  'zh-CN': {
+    // Header
+    search_placeholder: '搜索预测、话题、事件…',
+    sign_in: '登录', register: '注册',
+    // Nav
+    nav_trending: '热门', nav_latest: '最新',
+    nav_public_services: '公共服务', nav_policy_research: '政策研究',
+    nav_satisfaction_survey: '满意度调查', nav_education: '教育',
+    nav_health_medical: '健康医疗', nav_business_survey: '商业调查',
+    nav_personal_enterprise: '个人/企业',
+    // Marquee
+    mq_live: '实时',
+    // Stats
+    stat_total_pool: '总积分池', stat_24h_volume: '24小时积分量',
+    stat_total_predictions: '预测总数', stat_participants: '参与者',
+    unit_pts: '积分', unit_topics: '话题', unit_users: '用户',
+    // Sections
+    sec_featured: '精选调研', sec_all_predictions: '所有调研',
+    sec_region: '参与调研的地区占比',
+    // Carousel
+    carousel_featured: '精选',
+    carousel_pool: '积分池', carousel_deadline: '截止日期',
+    carousel_participants: '参与者',
+    // Sidebar
+    panel_latest: '最新调研', panel_hot_topics: '热门调研',
+    view_all: '查看全部 ›',
+    // Filters
+    filter_all: '全部', filter_healthcare: '医疗改革',
+    filter_education: '教育政策', filter_climate: '气候行动',
+    filter_tax: '税收改革', filter_infra: '基础设施',
+    filter_digital: '数字服务', filter_safety: '公共安全',
+    filter_housing: '住房',
+    all_loaded: '— 所有预测已加载 —',
+    // Banner
+    banner_tag: '限时活动',
+    banner_title: '2026 夏季公民挑战赛',
+    banner_desc: '正确预测10项政策结果，赢取50万积分奖池份额。前3名获得专属平台徽章。',
+    banner_cta: '参加挑战',
+    // Leaderboard
+    lb_title: 'Top 10 排行榜',
+    lb_points_gained: '积分增长', lb_accuracy: '准确率',
+    lb_day: '日', lb_week: '周', lb_month: '月', lb_year: '年',
+    lb_accuracy_label: '准确率', lb_pts_label: '积分',
+    // Live
+    live_redemptions: '实时兑换', live_label: '实时',
+    live_just_now: '刚刚', live_moments_ago: '片刻前',
+    live_redeemed: '兑换了',
+    // Cards
+    card_pts_pool: '积分池', card_joined: '已参与',
+    card_published: '发布', card_closes: '截止',
+    // Footer
+    footer_desc: '领先的中国预言机，专注政策结果、公众调查与社区预测。',
+    footer_platform: '平台', footer_support: '支持', footer_connect: '关注我们',
+    footer_trending: '热门预测', footer_public_services: '公共服务',
+    footer_policy_research: '政策研究', footer_satisfaction: '满意度调查',
+    footer_education_survey: '教育调查', footer_health: '健康医疗',
+    footer_leaderboard: '排行榜',
+    footer_help: '帮助中心', footer_guidelines: '社区准则',
+    footer_privacy: '隐私政策', footer_terms: '服务条款',
+    footer_contact: '联系我们', footer_api: 'API 文档',
+    footer_language: '语言',
+    footer_copyright: '© 2026 OraMarket. 保留所有权利。',
+    footer_powered: '由民意数据与社区智慧驱动',
+    // Page title
+    page_title: 'OraMarket — 中国预言机',
+    // Marquee pattern
+    mq_won: '赢得了', mq_on: '在',
+    // Regions
+    region_gd: '广东', region_js: '江苏', region_zj: '浙江', region_sd: '山东',
+    region_hn: '河南', region_sc: '四川', region_hb: '湖北', region_hn2: '湖南',
+    region_sh: '上海', region_bj: '北京',
+    // Hot topics sidebar
+    ht_healthcare: '医疗改革', ht_education: '教育政策',
+    ht_climate: '气候行动', ht_tax: '税收改革',
+    ht_infra: '基础设施', ht_digital: '数字服务',
+    ht_safety: '公共安全', ht_housing: '住房政策',
+    // Hot Surveys Questions
+    hp1: '医疗改革会在2026年全面落实吗？', hp2: '今年会实行免费公共交通吗？',
+    hp3: '国家基建预算会增加50%以上吗？', hp4: '年底前会通过新的税收优惠法案吗？',
+    hp5: '气候保护目标今年能达成吗？',
+    // Latest predictions sidebar
+    lp1: '2026年数字身份证会成为所有公民的必备证件吗？',
+    lp2: '2026年第四季度公共交通票价会上涨吗？',
+    lp3: '新的网络安全框架今年会颁布吗？',
+    lp4: '年底前学校疫苗接种率会超过90%吗？',
+    lp5: '气候行动计划会被议会批准吗？',
+    lp_min_ago: '分钟前',
+    // Featured slides
+    fs1_title: '全国公共医疗改革法案会在2026年第三季度通过吗？',
+    fs1_tags: '健康政策,公共服务,立法',
+    fs2_title: '通胀率在未来6个月内会降至3%以下吗？',
+    fs2_tags: '经济政策,政策研究',
+    fs3_title: '下一财年教育预算会增加10%吗？',
+    fs3_tags: '教育,预算政策',
+    fs4_title: '2027年前远程办公会成为所有联邦政府机构的强制要求吗？',
+    fs4_tags: '公共服务,职场政策',
+    fs5_title: '国家交通基础设施法案会获得两党批准吗？',
+    fs5_tags: '基础设施,立法,交通',
+    // Hot topic cards
+    htc_healthcare: '医疗改革', htc_climate: '气候行动', htc_education: '教育政策',
+    htc_pts_pool: '积分池',
+  },
+  'zh-TW': {
+    search_placeholder: '搜尋預測、話題、事件…',
+    sign_in: '登入', register: '註冊',
+    nav_trending: '熱門', nav_latest: '最新',
+    nav_public_services: '公共服務', nav_policy_research: '政策研究',
+    nav_satisfaction_survey: '滿意度調查', nav_education: '教育',
+    nav_health_medical: '健康醫療', nav_business_survey: '商業調查',
+    nav_personal_enterprise: '個人/企業',
+    mq_live: '即時',
+    stat_total_pool: '總積分池', stat_24h_volume: '24小時積分量',
+    stat_total_predictions: '預測總數', stat_participants: '參與者',
+    unit_pts: '積分', unit_topics: '話題', unit_users: '用戶',
+    sec_featured: '精選調研', sec_all_predictions: '所有調研',
+    sec_region: '參與調研的地區佔比',
+    carousel_featured: '精選',
+    carousel_pool: '積分池', carousel_deadline: '截止日期',
+    carousel_participants: '參與者',
+    panel_latest: '最新調研', panel_hot_topics: '熱門調研',
+    view_all: '查看全部 ›',
+    filter_all: '全部', filter_healthcare: '醫療改革',
+    filter_education: '教育政策', filter_climate: '氣候行動',
+    filter_tax: '稅收改革', filter_infra: '基礎設施',
+    filter_digital: '數位服務', filter_safety: '公共安全',
+    filter_housing: '住房',
+    all_loaded: '— 所有預測已載入 —',
+    banner_tag: '限時活動',
+    banner_title: '2026 夏季公民挑戰賽',
+    banner_desc: '正確預測10項政策結果，贏取50萬積分獎池份額。前3名獲得專屬平台徽章。',
+    banner_cta: '參加挑戰',
+    lb_title: 'Top 10 排行榜',
+    lb_points_gained: '積分增長', lb_accuracy: '準確率',
+    lb_day: '日', lb_week: '週', lb_month: '月', lb_year: '年',
+    lb_accuracy_label: '準確率', lb_pts_label: '積分',
+    live_redemptions: '即時兌換', live_label: '即時',
+    live_just_now: '剛剛', live_moments_ago: '片刻前',
+    live_redeemed: '兌換了',
+    card_pts_pool: '積分池', card_joined: '已參與',
+    card_published: '發佈', card_closes: '截止',
+    footer_desc: '領先的中國預言機，專注政策結果、公眾調查與社區預測。',
+    footer_platform: '平台', footer_support: '支援', footer_connect: '關注我們',
+    footer_trending: '熱門預測', footer_public_services: '公共服務',
+    footer_policy_research: '政策研究', footer_satisfaction: '滿意度調查',
+    footer_education_survey: '教育調查', footer_health: '健康醫療',
+    footer_leaderboard: '排行榜',
+    footer_help: '幫助中心', footer_guidelines: '社群準則',
+    footer_privacy: '隱私政策', footer_terms: '服務條款',
+    footer_contact: '聯絡我們', footer_api: 'API 文件',
+    footer_language: '語言',
+    footer_copyright: '© 2026 OraMarket. 保留所有權利。',
+    footer_powered: '由民意數據與社區智慧驅動',
+    page_title: 'OraMarket — 中國預言機',
+    mq_won: '贏得了', mq_on: '在',
+    region_gd: '廣東', region_js: '江蘇', region_zj: '浙江', region_sd: '山東',
+    region_hn: '河南', region_sc: '四川', region_hb: '湖北', region_hn2: '湖南',
+    region_sh: '上海', region_bj: '北京',
+    ht_healthcare: '醫療改革', ht_education: '教育政策',
+    ht_climate: '氣候行動', ht_tax: '稅收改革',
+    ht_infra: '基礎設施', ht_digital: '數位服務',
+    ht_safety: '公共安全', ht_housing: '住房政策',
+    hp1: '醫療改革會在2026年全面落實嗎？', hp2: '今年會實行免費公共交通嗎？',
+    hp3: '國家基建預算會增加50%以上嗎？', hp4: '年底前會通過新的稅收優惠法案嗎？',
+    hp5: '氣候保護目標今年能達成嗎？',
+    lp1: '2026年數位身份證會成為所有公民的必備證件嗎？',
+    lp2: '2026年第四季公共交通票價會上漲嗎？',
+    lp3: '新的網路安全框架今年會頒布嗎？',
+    lp4: '年底前學校疫苗接種率會超過90%嗎？',
+    lp5: '氣候行動計畫會被議會批准嗎？',
+    lp_min_ago: '分鐘前',
+    fs1_title: '全國公共醫療改革法案會在2026年第三季通過嗎？',
+    fs1_tags: '健康政策,公共服務,立法',
+    fs2_title: '通膨率在未來6個月內會降至3%以下嗎？',
+    fs2_tags: '經濟政策,政策研究',
+    fs3_title: '下一財年教育預算會增加10%嗎？',
+    fs3_tags: '教育,預算政策',
+    fs4_title: '2027年前遠端辦公會成為所有聯邦政府機構的強制要求嗎？',
+    fs4_tags: '公共服務,職場政策',
+    fs5_title: '國家交通基礎設施法案會獲得兩黨批准嗎？',
+    fs5_tags: '基礎設施,立法,交通',
+    htc_healthcare: '醫療政策全面評估', htc_climate: '2026氣候預算投票', htc_education: '高等教育資助法案',
+    htc_pts_pool: '積分池',
+  },
+  'en': {
+    search_placeholder: 'Search predictions, topics, events…',
+    sign_in: 'Sign In', register: 'Register',
+    nav_trending: 'Trending', nav_latest: 'Latest',
+    nav_public_services: 'Public Services', nav_policy_research: 'Policy Research',
+    nav_satisfaction_survey: 'Satisfaction Survey', nav_education: 'Education',
+    nav_health_medical: 'Health & Medical', nav_business_survey: 'Business Survey',
+    nav_personal_enterprise: 'Personal / Enterprise',
+    mq_live: 'LIVE',
+    stat_total_pool: 'Total Points Pool', stat_24h_volume: '24h Points Volume',
+    stat_total_predictions: 'Total Predictions', stat_participants: 'Participants',
+    unit_pts: 'pts', unit_topics: 'topics', unit_users: 'users',
+    sec_featured: 'Featured Surveys', sec_all_predictions: 'All Surveys',
+    sec_region: 'Participant Regional Distribution',
+    carousel_featured: 'FEATURED',
+    carousel_pool: 'pool', carousel_deadline: 'Deadline',
+    carousel_participants: 'participants',
+    panel_latest: 'Latest Surveys', panel_hot_topics: 'Hot Surveys',
+    view_all: 'View all ›',
+    filter_all: 'All', filter_healthcare: 'Healthcare Reform',
+    filter_education: 'Education Policy', filter_climate: 'Climate Action',
+    filter_tax: 'Tax Reform', filter_infra: 'Infrastructure',
+    filter_digital: 'Digital Services', filter_safety: 'Public Safety',
+    filter_housing: 'Housing',
+    all_loaded: '— All predictions loaded —',
+    banner_tag: 'Limited Time',
+    banner_title: 'Summer Civic Challenge 2026',
+    banner_desc: 'Predict 10 policy outcomes correctly and win a share of the 500,000 pts mega pool. Top 3 winners earn exclusive platform badges.',
+    banner_cta: 'Join Challenge',
+    lb_title: 'Top 10 Leaderboard',
+    lb_points_gained: 'Points Gained', lb_accuracy: 'Accuracy',
+    lb_day: 'Day', lb_week: 'Week', lb_month: 'Month', lb_year: 'Year',
+    lb_accuracy_label: 'Accuracy', lb_pts_label: 'pts',
+    live_redemptions: 'Live Redemptions', live_label: 'Live',
+    live_just_now: 'just now', live_moments_ago: 'moments ago',
+    live_redeemed: 'redeemed',
+    card_pts_pool: 'pts pool', card_joined: 'joined',
+    card_published: 'Published', card_closes: 'Closes',
+    footer_desc: 'The leading China Oracle platform for policy outcomes, public surveys, and community forecasting.',
+    footer_platform: 'Platform', footer_support: 'Support', footer_connect: 'Connect',
+    footer_trending: 'Trending Predictions', footer_public_services: 'Public Services',
+    footer_policy_research: 'Policy Research', footer_satisfaction: 'Satisfaction Survey',
+    footer_education_survey: 'Education Survey', footer_health: 'Health & Medical',
+    footer_leaderboard: 'Leaderboard',
+    footer_help: 'Help Center', footer_guidelines: 'Community Guidelines',
+    footer_privacy: 'Privacy Policy', footer_terms: 'Terms of Service',
+    footer_contact: 'Contact Us', footer_api: 'API Documentation',
+    footer_language: 'Language',
+    footer_copyright: '© 2026 OraMarket. All rights reserved.',
+    footer_powered: 'Powered by civic data & community intelligence',
+    page_title: 'OraMarket — China Oracle',
+    mq_won: 'won', mq_on: 'on',
+    region_gd: 'Guangdong', region_js: 'Jiangsu', region_zj: 'Zhejiang', region_sd: 'Shandong',
+    region_hn: 'Henan', region_sc: 'Sichuan', region_hb: 'Hubei', region_hn2: 'Hunan',
+    region_sh: 'Shanghai', region_bj: 'Beijing',
+    ht_healthcare: 'Healthcare Reform', ht_education: 'Education Policy',
+    ht_climate: 'Climate Action', ht_tax: 'Tax Reform',
+    ht_infra: 'Infrastructure', ht_digital: 'Digital Services',
+    ht_safety: 'Public Safety', ht_housing: 'Housing Policy',
+    hp1: 'Will healthcare reform be fully implemented in 2026?', hp2: 'Will free public transit be introduced this year?',
+    hp3: 'Will the national infra budget increase by over 50%?', hp4: 'Will the new tax cut bill pass before year end?',
+    hp5: 'Will the climate protection goals be met this year?',
+    lp1: 'Will digital ID cards become mandatory for all citizens in 2026?',
+    lp2: 'Will public transit fares increase by Q4 2026?',
+    lp3: 'Will the new cybersecurity framework be enacted this year?',
+    lp4: 'Will school vaccination rates exceed 90% by year end?',
+    lp5: 'Will the climate action plan be approved by parliament?',
+    lp_min_ago: 'min ago',
+    fs1_title: 'Will the National Public Healthcare Reform Bill pass in Q3 2026?',
+    fs1_tags: 'Health Policy,Public Services,Legislation',
+    fs2_title: 'Will inflation drop below 3% within the next 6 months?',
+    fs2_tags: 'Economic Policy,Policy Research',
+    fs3_title: 'Will the education budget increase by 10% in next fiscal year?',
+    fs3_tags: 'Education,Budget Policy',
+    fs4_title: 'Will remote work become mandatory for all federal government offices by 2027?',
+    fs4_tags: 'Public Services,Workplace Policy',
+    fs5_title: 'Will the National Transportation Infrastructure Bill receive bipartisan approval?',
+    fs5_tags: 'Infrastructure,Legislation,Transport',
+    htc_healthcare: 'Healthcare Reform', htc_climate: 'Climate Action', htc_education: 'Education Policy',
+    htc_pts_pool: 'pts pool',
+  }
+};
+
+function t(key) {
+  return (I18N[currentLang] && I18N[currentLang][key]) || (I18N['zh-CN'][key]) || key;
+}
+
+function applyI18n() {
+  // Static elements with data-i18n
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const val = t(key);
+    // For elements that contain SVG children (like banner_cta, nav_trending), preserve SVG
+    const svg = el.querySelector('svg');
+    if (svg) {
+      // Save SVG, set text, re-append SVG
+      const svgClone = svg.cloneNode(true);
+      el.textContent = val + ' ';
+      el.appendChild(svgClone);
+    } else {
+      el.textContent = val;
+    }
+  });
+  // Placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+  });
+  // Page title
+  document.title = t('page_title');
+  // HTML lang attribute
+  const langMap = {'zh-CN':'zh-CN','zh-TW':'zh-TW','en':'en'};
+  document.documentElement.lang = langMap[currentLang] || 'zh-CN';
+
+  // Update carousel slide content
+  updateCarouselI18n();
+  // Update side surveys
+  renderSideSurveys();
+  // Update marquee
+  updateMarqueeI18n();
+  // Re-render dynamic content
+  renderTopics();
+  renderLB();
+  renderRegion();
+  // Re-render cards (clear and reload)
+  reloadCards();
+}
+
+const CAROUSEL_COMMENTS = [
+  [
+    { n: 'Marcus', zh: '我觉得这次一定会通过！', tw: '我覺得這次一定會通過！', en: 'I think this will definitely pass!' },
+    { n: 'Sarah', zh: '现在 YES 的赔率太低了。', tw: '現在 YES 的賠率太低了。', en: 'The odds for YES are too low right now.' },
+    { n: 'Kevin', zh: '预计私营部门会强烈反对……', tw: '預計私營部門會強烈反對……', en: 'Strong resistance expected from the private sector...' },
+    { n: 'Anna', zh: 'YES 稳了。', tw: 'YES 穩了。', en: 'YES is a lock.' },
+  ],
+  [
+    { n: 'David', zh: '美联储看起来很鹰派。', tw: '聯準會看起來很鷹派。', en: 'The Fed looks hawkish.' },
+    { n: 'Lisa', zh: '油价又要涨回去了……', tw: '油價又要漲回去了……', en: 'Gas prices are going back up...' },
+    { n: 'Tom', zh: '等就业报告出来再说。', tw: '等就業報告出來再說。', en: 'Wait until the jobs report comes out.' },
+    { n: 'Emily', zh: '通胀可能维持在 3.5% 左右。', tw: '通膨可能維持在 3.5% 左右。', en: 'Inflation might stay around 3.5%.' },
+  ],
+  [
+    { n: 'Brian', zh: '教师工会在大力推动。', tw: '教師工會在大力推動。', en: "Teachers' union is pushing hard." },
+    { n: 'Alice', zh: '预算已经很紧张了。', tw: '預算已經很緊張了。', en: 'The budget is already too tight.' },
+    { n: 'Chris', zh: '涨 10% 太多了，不太可能。', tw: '漲 10% 太多了，不太可能。', en: '10% is a massive jump, unlikely.' },
+    { n: 'Diana', zh: '选举年，什么都可能发生。', tw: '選舉年，什麼都可能發生。', en: 'Election year, anything can happen.' },
+  ],
+  [
+    { n: 'Ethan', zh: '他们刚签了长期租约。', tw: '他們剛簽了長期租約。', en: 'They just signed long term leases.' },
+    { n: 'Fiona', zh: '混合办公才是未来，不是全远程。', tw: '混合辦公才是未來，不是全遠端。', en: 'Hybrid is the future, not full remote.' },
+    { n: 'George', zh: '预算削减可能会逼着这么做！', tw: '預算削減可能會逼著這麼做！', en: 'Budget cuts might force it!' },
+    { n: 'Hannah', zh: '涉密部门不太可能。', tw: '涉密部門不太可能。', en: 'Unlikely for secure departments.' },
+  ],
+  [
+    { n: 'Ian', zh: '大家都同意道路需要修整。', tw: '大家都同意道路需要修整。', en: 'Everyone agrees roads need fixing.' },
+    { n: 'Julia', zh: '资金来源仍有争议。', tw: '資金來源仍有爭議。', en: 'Funding source is still contested.' },
+    { n: 'Karl', zh: '在我看来已成定局。', tw: '在我看來已成定局。', en: 'Looks like a done deal to me.' },
+    { n: 'Lily', zh: '可能小幅修订后通过。', tw: '可能小幅修訂後通過。', en: 'Might pass with minor amendments.' },
+  ],
+];
+
+function updateCarouselI18n() {
+  const slides = document.querySelectorAll('.c-slide');
+  const ccKey = currentLang === 'en' ? 'en' : currentLang === 'zh-TW' ? 'tw' : 'zh';
+  const slideData = [
+    { title: 'fs1_title', tags: 'fs1_tags', pool: '248,000', published: '2026-05-05', deadline: '2026-09-30', parts: '2,847' },
+    { title: 'fs2_title', tags: 'fs2_tags', pool: '186,500', published: '2026-06-01', deadline: '2026-12-31', parts: '1,923' },
+    { title: 'fs3_title', tags: 'fs3_tags', pool: '142,800', published: '2026-05-20', deadline: '2026-11-15', parts: '1,654' },
+    { title: 'fs4_title', tags: 'fs4_tags', pool: '98,200', published: '2026-04-15', deadline: '2026-10-01', parts: '1,247' },
+    { title: 'fs5_title', tags: 'fs5_tags', pool: '312,600', published: '2026-04-01', deadline: '2026-08-31', parts: '3,412' },
+  ];
+  slides.forEach((slide, i) => {
+    if (!slideData[i]) return;
+    const d = slideData[i];
+    const title = slide.querySelector('.c-title');
+    if (title) title.textContent = t(d.title);
+    const meta = slide.querySelector('.c-meta');
+    if (meta) {
+      meta.innerHTML = `<span><span class="c-pool-val">${d.pool}${t('unit_pts')}</span> ${t('carousel_pool')}</span>
+        <span>${t('card_published')}: ${d.published}</span>
+        <span>${t('carousel_deadline')}: ${d.deadline}</span>
+        <span>${d.parts} ${t('carousel_participants')}</span>`;
+    }
+    const tagsEl = slide.querySelector('.c-tags');
+    if (tagsEl) {
+      tagsEl.innerHTML = t(d.tags).split(',').map(tg => `<span class="c-tag">${tg.trim()}</span>`).join('');
+    }
+    const track = slide.querySelector('.cc-track');
+    if (track && CAROUSEL_COMMENTS[i]) {
+      track.innerHTML = CAROUSEL_COMMENTS[i].map(c => `<span class="cc-item"><b>${c.n}:</b> ${c[ccKey]}</span>`).join('');
+    }
+  });
+}
+
+const LATEST_SURVEYS = [
+  { key: 'lp1', pool: '12K', y: 58, oY: '1.72', oN: '2.38' },
+  { key: 'lp2', pool: '8K', y: 37, oY: '2.70', oN: '1.58' },
+  { key: 'lp3', pool: '21K', y: 71, oY: '1.40', oN: '3.44' },
+  { key: 'lp4', pool: '45K', y: 82, oY: '1.21', oN: '5.55' },
+  { key: 'lp5', pool: '9K', y: 46, oY: '2.17', oN: '1.85' },
+];
+
+const HOT_SURVEYS = [
+  { key: 'hp1', pool: '124K', y: 66, oY: '1.51', oN: '2.94' },
+  { key: 'hp2', pool: '89K', y: 41, oY: '2.43', oN: '1.69' },
+  { key: 'hp3', pool: '75K', y: 53, oY: '1.88', oN: '2.12' },
+  { key: 'hp4', pool: '62K', y: 79, oY: '1.26', oN: '4.76' },
+  { key: 'hp5', pool: '51K', y: 28, oY: '3.57', oN: '1.38' },
+];
+
+function renderSideSurveys() {
+  const mkList = (arr) => arr.map(d => `
+    <div class="side-survey">
+      <div class="side-ttl">${t(d.key)}</div>
+      <div class="side-opts">
+        <div class="s-opt y">
+          <span class="so-lbl">YES</span>
+          <span class="so-pct">${d.y}%</span>
+          <span class="so-odds">${d.oY}x</span>
+        </div>
+        <div class="s-opt n">
+          <span class="so-lbl">NO</span>
+          <span class="so-pct">${100-d.y}%</span>
+          <span class="so-odds">${d.oN}x</span>
+        </div>
+      </div>
+    </div>`).join('');
+  document.getElementById('latestList').innerHTML = mkList(LATEST_SURVEYS);
+  document.getElementById('hotList').innerHTML = mkList(HOT_SURVEYS);
+}
+
+function updateMarqueeI18n() {
+  const MQ_DATA = [
+    { name: 'Michael T.', pts: '+1,000', topic_zh: '公共医疗改革', topic_zhTW: '公共醫療改革', topic_en: 'Public Healthcare Reform' },
+    { name: 'Sarah K.', pts: '+2,500', topic_zh: '教育预算投票', topic_zhTW: '教育預算投票', topic_en: 'Education Budget Vote' },
+    { name: 'James W.', pts: '+800', topic_zh: '基础设施法案', topic_zhTW: '基礎設施法案', topic_en: 'Infrastructure Bill Outcome' },
+    { name: 'Emily R.', pts: '+3,200', topic_zh: '气候政策预测', topic_zhTW: '氣候政策預測', topic_en: 'Climate Policy Forecast' },
+    { name: 'David L.', pts: '+1,500', topic_zh: '税收改革调查', topic_zhTW: '稅收改革調查', topic_en: 'Tax Reform Survey' },
+    { name: 'Anna M.', pts: '+950', topic_zh: '住房政策审批', topic_zhTW: '住房政策審批', topic_en: 'Housing Policy Approval' },
+    { name: 'Robert C.', pts: '+4,100', topic_zh: '国家预算预测', topic_zhTW: '國家預算預測', topic_en: 'National Budget Prediction' },
+    { name: 'Lisa P.', pts: '+1,200', topic_zh: '数字政务倡议', topic_zhTW: '數位政務倡議', topic_en: 'Digital Gov Initiative' },
+    { name: 'Kevin H.', pts: '+2,800', topic_zh: '公共交通改革', topic_zhTW: '公共交通改革', topic_en: 'Public Transit Reform' },
+  ];
+  const topicKey = currentLang === 'en' ? 'topic_en' : currentLang === 'zh-TW' ? 'topic_zhTW' : 'topic_zh';
+  const wonWord = t('mq_won');
+  const onWord = t('mq_on');
+  let html = '';
+  // Generate items twice for seamless loop
+  for (let r = 0; r < 2; r++) {
+    MQ_DATA.forEach(d => {
+      html += `<span class="mq-item"><span class="w">${d.name}</span> ${wonWord} <span class="p">${d.pts} ${t('unit_pts')}</span> ${onWord} ${d[topicKey]}</span><span class="mq-sep">|</span>\n`;
+    });
+  }
+  document.getElementById('mqTrack').innerHTML = html;
+}
+
+function reloadCards() {
+  const grid = document.getElementById('cardGrid');
+  grid.innerHTML = '';
+  page = 0;
+  busy = false;
+  document.getElementById('allDone').style.display = 'none';
+  document.getElementById('loadInd').style.display = 'block';
+  loadPage();
+}
+
+function switchLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('oramarket_lang', lang);
+  applyI18n();
+}
+
+/* ── DATA ── */
+const AV_COLORS=['#1E40AF','#DC2626','#16A34A','#7C3AED','#D97706','#0891B2','#BE185D','#B45309'];
+const TOPICS_I18N = {
+  'zh-CN': ['医疗改革','教育政策','气候行动','税收改革','基础设施','数字服务','公共安全','住房','交通','就业'],
+  'zh-TW': ['醫療改革','教育政策','氣候行動','稅收改革','基礎設施','數位服務','公共安全','住房','交通','就業'],
+  'en': ['Healthcare Reform','Education Policy','Climate Action','Tax Reform','Infrastructure','Digital Services','Public Safety','Housing','Transport','Employment']
+};
+const TITLES_I18N = {
+  'zh-CN': [
+    '新的公共健康保险法案会在2027年前将覆盖范围扩大到所有公民吗？',
+    '下一个预算周期中国家教育支出会增加15%吗？',
+    '气候变化缓解法案会在立法截止日期前通过吗？',
+    '本财年数字政务服务采用率会超过80%吗？',
+    '城市住房可负担指数会在2026年第三季度改善吗？',
+    '全国医疗服务公众满意度会超过75%吗？',
+    '国家宽带基础设施项目会达到2026年的目标吗？',
+    '2026年底前环境法规会被收紧吗？',
+    '新的网络安全立法会在本届立法期通过吗？',
+    '公共交通客流量会在第四季度恢复到2020年前的水平吗？',
+    '最低工资上涨法案会在下届议会通过吗？',
+    '所有主要城市的市政供水质量标准会升级吗？',
+    '数字身份证推广会在年中达到50%的采用率吗？',
+    '2026年紧急医疗资金会增加20%吗？',
+    '开放政府数据计划会按时启动吗？'
+  ],
+  'zh-TW': [
+    '新的公共健康保險法案會在2027年前將覆蓋範圍擴大到所有公民嗎？',
+    '下一個預算週期國家教育支出會增加15%嗎？',
+    '氣候變遷緩解法案會在立法截止日期前通過嗎？',
+    '本財年數位政務服務採用率會超過80%嗎？',
+    '城市住房可負擔指數會在2026年第三季改善嗎？',
+    '全國醫療服務公眾滿意度會超過75%嗎？',
+    '國家寬頻基礎設施項目會達到2026年的目標嗎？',
+    '2026年底前環境法規會被收緊嗎？',
+    '新的網路安全立法會在本屆立法期通過嗎？',
+    '公共交通客流量會在第四季恢復到2020年前的水準嗎？',
+    '最低工資上漲法案會在下屆議會通過嗎？',
+    '所有主要城市的市政供水品質標準會升級嗎？',
+    '數位身份證推廣會在年中達到50%的採用率嗎？',
+    '2026年緊急醫療資金會增加20%嗎？',
+    '開放政府數據計畫會按時啟動嗎？'
+  ],
+  'en': [
+    'Will the new Public Health Insurance Act expand coverage to all citizens by 2027?',
+    'Will national education spending increase by 15% in the next budget cycle?',
+    'Will the climate change mitigation bill pass before the legislative deadline?',
+    'Will digital government service adoption exceed 80% this fiscal year?',
+    'Will the urban housing affordability index improve in Q3 2026?',
+    'Will public satisfaction with healthcare services exceed 75% nationally?',
+    'Will the national broadband infrastructure project meet its 2026 targets?',
+    'Will environmental regulations be tightened by year-end 2026?',
+    'Will the new cybersecurity legislation be enacted this legislative term?',
+    'Will public transport ridership recover to pre-2020 levels by Q4?',
+    'Will the minimum wage increase bill pass in the next parliamentary session?',
+    'Will municipal water quality standards be upgraded across all major cities?',
+    'Will the digital ID rollout reach 50% adoption rate by mid-year?',
+    'Will emergency healthcare funding be increased by 20% in 2026?',
+    'Will the open government data initiative launch on schedule?'
+  ]
+};
+function getTopics() { return TOPICS_I18N[currentLang] || TOPICS_I18N['zh-CN']; }
+function getTitles() { return TITLES_I18N[currentLang] || TITLES_I18N['zh-CN']; }
+// Keep backward-compatible references
+const TOPICS = TOPICS_I18N['en'];
+const TITLES=[
+  'Will the new Public Health Insurance Act expand coverage to all citizens by 2027?',
+  'Will national education spending increase by 15% in the next budget cycle?',
+  'Will the climate change mitigation bill pass before the legislative deadline?',
+  'Will digital government service adoption exceed 80% this fiscal year?',
+  'Will the urban housing affordability index improve in Q3 2026?',
+  'Will public satisfaction with healthcare services exceed 75% nationally?',
+  'Will the national broadband infrastructure project meet its 2026 targets?',
+  'Will environmental regulations be tightened by year-end 2026?',
+  'Will the new cybersecurity legislation be enacted this legislative term?',
+  'Will public transport ridership recover to pre-2020 levels by Q4?',
+  'Will the minimum wage increase bill pass in the next parliamentary session?',
+  'Will municipal water quality standards be upgraded across all major cities?',
+  'Will the digital ID rollout reach 50% adoption rate by mid-year?',
+  'Will emergency healthcare funding be increased by 20% in 2026?',
+  'Will the open government data initiative launch on schedule?'
+];
+
+function rnd(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+function pick(a){return a[Math.floor(Math.random()*a.length)]}
+function fmt(n){return n.toLocaleString()}
+function dateStr(offset){const d=new Date('2026-06-03');d.setDate(d.getDate()+offset);return d.toISOString().split('T')[0]}
+
+const CARDS=Array.from({length:400},(_,i)=>{
+  const y=rnd(20,80),n=100-y;
+  const tagIndices=[...new Set([rnd(0,9),rnd(0,9)])].slice(0,rnd(1,3));
+  return{id:i,titleIdx:rnd(0,14),pool:rnd(2000,350000),yesPct:y,noPct:n,
+    yesOdds:(100/y).toFixed(2),noOdds:(100/n).toFixed(2),
+    parts:rnd(50,6000),tagIndices,pub:dateStr(-rnd(1,30)),dl:dateStr(rnd(10,120))};
+});
+
+const LB={
+  day:[
+    {n:'Alex Turner',pts:'+4,100',acc:'94%',c:'#DC2626'},
+    {n:'Maria Chen',pts:'+3,200',acc:'91%',c:'#1E40AF'},
+    {n:'James Wilson',pts:'+2,800',acc:'88%',c:'#16A34A'},
+    {n:'Sarah Kim',pts:'+2,250',acc:'86%',c:'#7C3AED'},
+    {n:'Daniel Park',pts:'+1,900',acc:'83%',c:'#D97706'},
+    {n:'Emma Walsh',pts:'+1,650',acc:'81%',c:'#0891B2'},
+    {n:'Chris Lee',pts:'+1,400',acc:'79%',c:'#BE185D'},
+    {n:'Linda Zhang',pts:'+1,100',acc:'77%',c:'#1E40AF'},
+    {n:'Ryan Moore',pts:'+950',acc:'75%',c:'#DC2626'},
+    {n:'Nicole Brown',pts:'+800',acc:'73%',c:'#16A34A'}
+  ],
+  week:[
+    {n:'Sarah Kim',pts:'+18,400',acc:'92%',c:'#7C3AED'},
+    {n:'Alex Turner',pts:'+15,200',acc:'89%',c:'#DC2626'},
+    {n:'Maria Chen',pts:'+13,700',acc:'87%',c:'#1E40AF'},
+    {n:'Robert Clark',pts:'+11,500',acc:'85%',c:'#D97706'},
+    {n:'James Wilson',pts:'+9,800',acc:'83%',c:'#16A34A'},
+    {n:'Emma Walsh',pts:'+8,300',acc:'81%',c:'#0891B2'},
+    {n:'Michael Liu',pts:'+7,100',acc:'79%',c:'#1E40AF'},
+    {n:'Chris Lee',pts:'+6,200',acc:'77%',c:'#BE185D'},
+    {n:'Nancy Ho',pts:'+5,400',acc:'75%',c:'#D97706'},
+    {n:'Daniel Park',pts:'+4,800',acc:'73%',c:'#7C3AED'}
+  ],
+  month:[
+    {n:'Robert Clark',pts:'+67,200',acc:'93%',c:'#D97706'},
+    {n:'Sarah Kim',pts:'+58,900',acc:'90%',c:'#7C3AED'},
+    {n:'Alex Turner',pts:'+52,100',acc:'88%',c:'#DC2626'},
+    {n:'Maria Chen',pts:'+48,600',acc:'86%',c:'#1E40AF'},
+    {n:'James Wilson',pts:'+41,300',acc:'84%',c:'#16A34A'},
+    {n:'Emma Walsh',pts:'+36,700',acc:'82%',c:'#0891B2'},
+    {n:'Michael Liu',pts:'+31,200',acc:'80%',c:'#1E40AF'},
+    {n:'Linda Zhang',pts:'+27,900',acc:'78%',c:'#1E40AF'},
+    {n:'Chris Lee',pts:'+23,500',acc:'76%',c:'#BE185D'},
+    {n:'Nancy Ho',pts:'+19,800',acc:'74%',c:'#D97706'}
+  ],
+  year:[
+    {n:'Maria Chen',pts:'+284,600',acc:'95%',c:'#1E40AF'},
+    {n:'Robert Clark',pts:'+247,300',acc:'92%',c:'#D97706'},
+    {n:'Alex Turner',pts:'+218,900',acc:'90%',c:'#DC2626'},
+    {n:'Sarah Kim',pts:'+196,400',acc:'88%',c:'#7C3AED'},
+    {n:'James Wilson',pts:'+175,200',acc:'86%',c:'#16A34A'},
+    {n:'Michael Liu',pts:'+152,800',acc:'84%',c:'#1E40AF'},
+    {n:'Emma Walsh',pts:'+138,500',acc:'82%',c:'#0891B2'},
+    {n:'Linda Zhang',pts:'+124,100',acc:'80%',c:'#1E40AF'},
+    {n:'Nancy Ho',pts:'+109,700',acc:'78%',c:'#D97706'},
+    {n:'Daniel Park',pts:'+98,300',acc:'76%',c:'#7C3AED'}
+  ]
+};
+
+const REGIONS=[
+  {key:'region_gd', pct:24, pts:'3,450,200', users:'45,210'},
+  {key:'region_js', pct:18, pts:'2,580,100', users:'34,180'},
+  {key:'region_zj', pct:15, pts:'2,150,400', users:'28,450'},
+  {key:'region_sd', pct:12, pts:'1,720,300', users:'22,760'},
+  {key:'region_hn', pct:9, pts:'1,290,200', users:'17,070'},
+  {key:'region_sc', pct:7, pts:'1,003,500', users:'13,280'},
+  {key:'region_hb', pct:6, pts:'860,100', users:'11,380'},
+  {key:'region_hn2', pct:4, pts:'573,400', users:'7,590'},
+  {key:'region_sh', pct:3, pts:'430,100', users:'5,690'},
+  {key:'region_bj', pct:2, pts:'286,700', users:'3,790'}
+];
+
+/* ── SPARKLINES ── */
+function mkSparkline(id,color){
+  const ctx=document.getElementById(id).getContext('2d');
+  const pts=Array.from({length:24},()=>rnd(30,100));
+  new Chart(ctx,{
+    type:'line',
+    data:{labels:pts.map((_,i)=>i),datasets:[{data:pts,borderColor:color,borderWidth:1.5,
+      backgroundColor:color+'22',fill:true,tension:.4,pointRadius:0}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{x:{display:false},y:{display:false}},animation:{duration:900}}
+  });
+}
+
+/* ── COUNTER ── */
+function countUp(id,target){
+  const el=document.getElementById(id);
+  const t0=performance.now();
+  const dur=1800;
+  (function tick(now){
+    const p=Math.min((now-t0)/dur,1);
+    const e=1-Math.pow(1-p,4);
+    el.textContent=Math.floor(e*target).toLocaleString();
+    if(p<1)requestAnimationFrame(tick);
+  })(performance.now());
+}
+
+/* ── CAROUSEL ── */
+let cIdx=0,cTimer;
+function updateCarousel(){
+  document.querySelectorAll('.c-slide').forEach((s,i)=>s.classList.toggle('active',i===cIdx));
+  document.querySelectorAll('.c-dot').forEach((d,i)=>d.classList.toggle('active',i===cIdx));
+  setTimeout(()=>{if(trendCharts[cIdx])trendCharts[cIdx].resize();},30);
+}
+function cNext(){cIdx=(cIdx+1)%5;updateCarousel();resetCTimer()}
+function cPrev(){cIdx=(cIdx+4)%5;updateCarousel();resetCTimer()}
+function goSlide(n){cIdx=n;updateCarousel();resetCTimer()}
+function resetCTimer(){clearInterval(cTimer);cTimer=setInterval(cNext,5000)}
+
+/* ── CARDS ── */
+let page=0,busy=false;
+const PER_PAGE=40;
+
+function mkCard(d){
+  const div=document.createElement('div');
+  div.className='pred-card';
+  div.style.animationDelay=(d.id%PER_PAGE)*20+'ms';
+  const avs=AV_COLORS.slice(0,3).map((c,i)=>`<div class="av" style="background:${c}">${String.fromCharCode(65+i)}</div>`).join('');
+  const topics=getTopics();
+  const titles=getTitles();
+  const cardTitle=titles[d.titleIdx] || titles[0];
+  const cardTags=d.tagIndices.map(idx=>topics[idx]||topics[0]);
+  const tags=cardTags.map(tg=>`<span class="pc-tag">${tg}</span>`).join('');
+  div.innerHTML=`
+    <div class="pc-title">${cardTitle}</div>
+    <div class="pc-pool">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      <span class="pc-pool-n">${fmt(d.pool)}</span><span class="pc-pool-l">${t('card_pts_pool')}</span>
+    </div>
+    <div class="pc-vote">
+      <div class="pc-vrow"><div class="pc-vlbl"><span class="pc-vtag y">YES</span><span class="pc-vodds">×${d.yesOdds}</span></div><span class="pc-vpct y">${d.yesPct}%</span></div>
+      <div class="pc-bar"><div class="pc-bary" style="width:${d.yesPct}%"></div></div>
+      <div class="pc-vrow" style="margin-top:3px"><div class="pc-vlbl"><span class="pc-vtag n">NO</span><span class="pc-vodds">×${d.noOdds}</span></div><span class="pc-vpct n">${d.noPct}%</span></div>
+    </div>
+    <div class="pc-parts"><div class="av-stack">${avs}</div><span class="pc-cnt">${fmt(d.parts)} ${t('card_joined')}</span></div>
+    <div class="pc-tags">${tags}</div>
+    <div class="pc-foot"><span class="pc-pub">${t('card_published')}: ${d.pub}</span><span class="pc-dl">${t('card_closes')}: ${d.dl}</span></div>`;
+  return div;
+}
+
+function loadPage(){
+  if(busy)return;
+  const start=page*PER_PAGE,total=CARDS.length;
+  if(start>=total){document.getElementById('allDone').style.display='block';document.getElementById('loadInd').style.display='none';return}
+  busy=true;
+  document.getElementById('loadInd').style.display='block';
+  setTimeout(()=>{
+    const grid=document.getElementById('cardGrid');
+    CARDS.slice(start,start+PER_PAGE).forEach(d=>grid.appendChild(mkCard(d)));
+    page++;busy=false;
+    document.getElementById('loadInd').style.display='none';
+    if(page*PER_PAGE>=total){document.getElementById('allDone').style.display='block'}
+  },500);
+}
+
+new IntersectionObserver(e=>{if(e[0].isIntersecting)loadPage()},{rootMargin:'300px'})
+  .observe(document.getElementById('sentinel'));
+
+/* ── LEADERBOARD (metric × period) ── */
+let lbPeriod='day',lbMet='points';
+function renderLB(){
+  let data=LB[lbPeriod].slice();
+  if(lbMet==='accuracy')data.sort((a,b)=>parseFloat(b.acc)-parseFloat(a.acc));
+  document.getElementById('lbList').innerHTML=data.map((item,i)=>{
+    const rc=i===0?'g':i===1?'s':i===2?'b':'';
+    const main=lbMet==='points'?item.pts:item.acc;
+    const sub=lbMet==='points'?(t('lb_accuracy_label')+': '+item.acc):(item.pts+' '+t('lb_pts_label'));
+    const mc=lbMet==='points'?'var(--green)':'var(--blue)';
+    return`<div class="lb-item">
+      <span class="lb-rank ${rc}">${i+1}</span>
+      <div class="lb-av" style="background:${item.c}">${item.n[0]}</div>
+      <div class="lb-user"><div class="lb-name">${item.n}</div><div class="lb-acc">${sub}</div></div>
+      <span class="lb-pts" style="color:${mc}">${main}</span>
+    </div>`;
+  }).join('');
+}
+function lbTab(btn,period){lbPeriod=period;document.querySelectorAll('.lb-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');renderLB();}
+function lbMetric(btn,m){lbMet=m;document.querySelectorAll('.lb-mtab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');renderLB();}
+
+/* ── 3 HOT TOPIC CARDS ── */
+const HOT_TOPICS=[
+  {nameKey:'htc_healthcare',pool:248000,inc:1820,pct:4.2,c:'#DC2626'},
+  {nameKey:'htc_climate',pool:312600,inc:2410,pct:5.6,c:'#16A34A'},
+  {nameKey:'htc_education',pool:142800,inc:1240,pct:3.1,c:'#1E40AF'}
+];
+function renderTopics(){
+  document.getElementById('topicRow').innerHTML=HOT_TOPICS.map(tp=>`
+    <div class="topic-card">
+      <div class="tc-head"><span class="tc-dot" style="background:${tp.c}"></span><span class="tc-name">${t(tp.nameKey)}</span></div>
+      <div class="tc-pool">${fmt(tp.pool)}<span>${t('htc_pts_pool')}</span></div>
+      <div class="tc-stat"><span class="tc-inc">+${fmt(tp.inc)}/hr</span><span class="tc-pct">▲ ${tp.pct}%</span></div>
+    </div>`).join('');
+}
+
+/* ── YES/NO TREND CHARTS (x=date, y=%) ── */
+const TREND_DATES=['05-23','05-24','05-25','05-26','05-27','05-28','05-29','05-30','05-31','06-01','06-02','06-03'];
+const TRENDS=[
+  [52,58,54,61,56,63,59,66,61,68,64,67],
+  [56,51,57,49,54,47,52,45,49,43,47,45],
+  [43,49,45,51,47,54,49,55,50,56,51,52],
+  [51,45,49,42,47,40,45,38,43,36,40,38],
+  [60,66,62,69,64,71,66,73,68,74,69,71]
+];
+let trendCharts=[];
+function mkTrend(i){
+  const cv=document.getElementById('ctrend'+i);if(!cv)return;
+  const yes=TRENDS[i],no=yes.map(v=>100-v);
+  trendCharts[i]=new Chart(cv.getContext('2d'),{
+    type:'line',
+    data:{labels:TREND_DATES,datasets:[
+      {label:'YES',data:yes,borderColor:'#2563EB',backgroundColor:'rgba(37,99,235,.08)',borderWidth:2,tension:.4,pointRadius:0,fill:true},
+      {label:'NO',data:no,borderColor:'#DC2626',backgroundColor:'transparent',borderWidth:2,tension:.4,pointRadius:0,borderDash:[4,3]}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},
+        tooltip:{enabled:true,callbacks:{label:c=>c.dataset.label+': '+c.parsed.y+'%'}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:8},color:'#94A3B8',maxRotation:0,autoSkip:true,maxTicksLimit:6}},
+        y:{min:0,max:100,grid:{color:'#F1F5F9'},ticks:{font:{size:8},color:'#94A3B8',stepSize:25,callback:v=>v+'%'}}},
+      animation:{duration:700}}
+  });
+}
+
+/* ── LIVE REDEMPTION STACK ── */
+const R_NAMES=['Marcus J.','Yuki T.','Amelia R.','Kevin S.','Priya M.','Tom L.','Sophie B.','Carlos V.','Aisha W.','Finn O.','Leo K.','Mia D.','Noah F.','Zara Q.'];
+const R_CARDS={'Didi Card':['×5','×10','×3'],'JD Card':['¥100','¥200','¥50'],'Mobile Top-Up':['$10','$20','$30']};
+const R_KEYS=Object.keys(R_CARDS);
+function pushRedeem(first){
+  const card=pick(R_KEYS),val=pick(R_CARDS[card]),name=pick(R_NAMES);
+  const pts=rnd(8,50)*100,c=pick(AV_COLORS);
+  const list=document.getElementById('liveList');
+  const justNowText=t('live_just_now');
+  const momentsText=t('live_moments_ago');
+  [...list.children].forEach(ch=>{const tm=ch.querySelector('.li-time');if(tm&&tm.textContent===justNowText)tm.textContent=momentsText;});
+  const el=document.createElement('div');
+  el.className='live-item'+(first?'':' enter');
+  el.innerHTML=`<div class="li-av" style="background:${c}">${name[0]}</div>
+    <div class="li-body"><div class="li-top"><span class="li-name">${name}</span><span class="li-time">${justNowText}</span></div>
+    <div class="li-act">${t('live_redeemed')} <b>${card} ${val}</b> · <span class="li-pts">${fmt(pts)} ${t('unit_pts')}</span></div></div>`;
+  list.prepend(el);
+  if(!first)requestAnimationFrame(()=>el.classList.remove('enter'));
+  while(list.children.length>7)list.removeChild(list.lastChild);
+}
+
+/* ── REGION DISTRIBUTION ── */
+function renderRegion(){
+  document.getElementById('regionGrid').innerHTML=REGIONS.map((d,i)=>`
+    <div class="region-item">
+      <div class="r-info">
+        <span class="r-name">${t(d.key)}</span>
+        <span class="r-pct">${d.pct}%</span>
+      </div>
+      <div class="r-bar-wrap"><div class="r-bar" style="width:${d.pct}%"></div></div>
+      <div class="r-stat">${d.pts} ${t('unit_pts')} · ${d.users} ${t('stat_participants')}</div>
+    </div>`).join('');
+}
+
+/* ── NAV / FILTER interactions ── */
+document.querySelectorAll('.nitem').forEach(b=>b.addEventListener('click',function(){
+  document.querySelectorAll('.nitem').forEach(x=>x.classList.remove('active'));
+  this.classList.add('active');
+}));
+document.querySelectorAll('.f-tag').forEach(b=>b.addEventListener('click',function(){
+  document.querySelectorAll('.f-tag').forEach(x=>x.classList.remove('active'));
+  this.classList.add('active');
+}));
+
+/* ── LIVE COUNTER TICK (every 3s) ── */
+const liveVals=[2847392,184293,12847,89234];
+setInterval(()=>{
+  const inc=[rnd(5,40),rnd(3,20),rnd(0,1),rnd(1,4)];
+  ['sv1','sv2','sv3','sv4'].forEach((id,i)=>{
+    const el=document.getElementById(id);
+    const cur=parseInt(el.textContent.replace(/,/g,''))||liveVals[i];
+    el.textContent=(cur+inc[i]).toLocaleString();
+  });
+},3000);
+
+/* ── INIT ── */
+window.addEventListener('load',()=>{
+  mkSparkline('sc1','#1E40AF');
+  mkSparkline('sc2','#DC2626');
+  mkSparkline('sc3','#16A34A');
+  mkSparkline('sc4','#7C3AED');
+  countUp('sv1',2847392);
+  countUp('sv2',184293);
+  countUp('sv3',12847);
+  countUp('sv4',89234);
+
+  // Apply i18n (this also calls renderTopics, renderLB, renderRedeem, reloadCards)
+  // MUST happen before mkTrend so the DOM expands to its final height
+  const langSelect=document.getElementById('langSelect');
+  langSelect.value=currentLang;
+  applyI18n();
+
+  for(let i=0;i<5;i++)mkTrend(i);
+  if(trendCharts[0])trendCharts[0].resize();
+
+  for(let i=0;i<5;i++)pushRedeem(true);
+  setInterval(pushRedeem,3500);
+  resetCTimer();
+
+  // Language switch handler
+  langSelect.addEventListener('change',function(){
+    switchLang(this.value);
+  });
+});
+</script>
+</body>
+</html>
