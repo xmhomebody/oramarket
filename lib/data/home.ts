@@ -389,8 +389,9 @@ export const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
 ];
 
 // 状态选项
-export type StatusKey = "active" | "settled";
+export type StatusKey = "active" | "settled" | "all";
 export const STATUS_OPTIONS: { key: StatusKey; label: string }[] = [
   { key: "active",   label: "进行中" },
   { key: "settled",  label: "已结算" },
+  { key: "all",      label: "全部" },
 ];

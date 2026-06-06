@@ -1,8 +1,5 @@
 "use client";
 
-// 分类调研页 —— 设计风格与首页完全一致
-// 左侧：话题标签菜单（含数量）
-// 右侧：带三个下拉筛选的调研卡片网格
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/components/providers/language-provider";
@@ -11,7 +8,6 @@ import { Logo } from "@/components/layouts/site-logo";
 import { HeaderSearch } from "@/components/layouts/header-search";
 import { TITLES_I18N, TOPICS_I18N } from "@/lib/i18n/dict";
 import {
-  CATEGORY_META,
   SORT_OPTIONS, PERIOD_OPTIONS, STATUS_OPTIONS,
   STABLE_CARDS,
   AV_COLORS,
@@ -20,7 +16,6 @@ import {
   type PredictionCard,
 } from "@/lib/data/home";
 
-// ── 下拉选择器组件（复用三次）──
 function Select<T extends string>({
   value, onChange, options, label,
 }: {
@@ -33,7 +28,6 @@ function Select<T extends string>({
   const ref = useRef<HTMLDivElement>(null);
   const current = options.find((o) => o.key === value);
 
-  // 点击外部关闭
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -93,7 +87,6 @@ function Select<T extends string>({
   );
 }
 
-// ── 调研卡片（与首页 mkCard 视觉完全一致）──
 function SurveyCard({ d, topics, titles, t }: {
   d: PredictionCard;
   topics: string[];
@@ -145,13 +138,24 @@ function SurveyCard({ d, topics, titles, t }: {
   );
 }
 
-interface CategoryPageProps {
-  slug: string;
-}
-
 const PER_PAGE = 40;
 
-// 所有导航分类：slug → 路由（与首页 NAV_ROUTES 保持一致）
+const TOPIC_COUNTS = Array.from({ length: 10 }, (_, idx) =>
+  STABLE_CARDS.filter((c) => c.tagIndices.includes(idx)).length
+);
+
+const TRENDING_TOPICS = [
+  { key: "all",        label: "全部",     count: STABLE_CARDS.length, topicIdx: -1 },
+  { key: "healthcare", label: "医疗改革", count: TOPIC_COUNTS[0],     topicIdx: 0 },
+  { key: "education",  label: "教育政策", count: TOPIC_COUNTS[1],     topicIdx: 1 },
+  { key: "climate",    label: "气候行动", count: TOPIC_COUNTS[2],     topicIdx: 2 },
+  { key: "tax",        label: "税收改革", count: TOPIC_COUNTS[3],     topicIdx: 3 },
+  { key: "infra",      label: "基础设施", count: TOPIC_COUNTS[4],     topicIdx: 4 },
+  { key: "digital",    label: "数字服务", count: TOPIC_COUNTS[5],     topicIdx: 5 },
+  { key: "safety",     label: "公共安全", count: TOPIC_COUNTS[6],     topicIdx: 6 },
+  { key: "housing",    label: "住房",     count: TOPIC_COUNTS[7],     topicIdx: 7 },
+];
+
 const NAV_ITEMS = [
   { label: "公共服务",   slug: "public-services" },
   { label: "政策研究",   slug: "policy-research" },
@@ -162,36 +166,29 @@ const NAV_ITEMS = [
   { label: "个人/企业",  slug: "personal-enterprise" },
 ];
 
-export function CategoryPage({ slug }: CategoryPageProps) {
+export function TrendingPage() {
   const { lang, t } = useLanguage();
   const router = useRouter();
 
-  // 左侧选中的话题
+  // 默认：排序=总积分量、时段=每月、状态=全部
+  const [sort, setSort] = useState<SortKey>("totalPool");
+  const [period, setPeriod] = useState<PeriodKey>("month");
+  const [status, setStatus] = useState<StatusKey>("all");
   const [activeTopic, setActiveTopic] = useState("all");
-  // 三个筛选器状态
-  const [sort, setSort] = useState<SortKey>("volume24h");
-  const [period, setPeriod] = useState<PeriodKey>("all");
-  const [status, setStatus] = useState<StatusKey>("active");
-  // 当前显示的卡片数量（懒加载）
   const [displayCount, setDisplayCount] = useState(PER_PAGE);
   const [loading, setLoading] = useState(false);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // 获取话题/标题数组（跟随语言）
   const topics = TOPICS_I18N[lang as keyof typeof TOPICS_I18N] || TOPICS_I18N["zh-CN"];
   const titles = TITLES_I18N[lang as keyof typeof TITLES_I18N] || TITLES_I18N["zh-CN"];
-
-  // 直接引用模块级稳定数据，SSR 和客户端使用同一份，彻底消除水合不一致
   const allCards = useRef<PredictionCard[]>(STABLE_CARDS);
 
-  // 按筛选/排序处理卡片（状态变化时重新计算）
   const filteredCards = useCallback(() => {
     let cards = [...allCards.current];
 
     if (status === "settled") cards = cards.filter((c) => c.id % 2 === 0);
     else if (status === "active") cards = cards.filter((c) => c.id % 2 !== 0);
 
-    // 时间范围筛选（用 dl 天数粗略模拟）
     const periodDays: Record<PeriodKey, number> = { day: 1, week: 7, month: 30, quarter: 90, all: 9999 };
     const maxDays = periodDays[period];
     cards = cards.filter((c) => {
@@ -199,22 +196,25 @@ export function CategoryPage({ slug }: CategoryPageProps) {
       return diff <= maxDays;
     });
 
-    // 排序（用确定性哈希代替 Math.random，避免 SSR/客户端水合不一致）
-    // 24h积分量：pool + 基于 id 的伪随机偏移（确定性）
+    if (activeTopic !== "all") {
+      const found = TRENDING_TOPICS.find((tp) => tp.key === activeTopic);
+      if (found && found.topicIdx >= 0) {
+        cards = cards.filter((c) => c.tagIndices.includes(found.topicIdx));
+      }
+    }
+
     const h = (id: number) => ((id * 2654435761) >>> 0) % 200;
     if (sort === "volume24h") cards.sort((a, b) => (b.pool + h(b.id)) - (a.pool + h(a.id)));
     else if (sort === "totalPool") cards.sort((a, b) => b.pool - a.pool);
     else cards.sort((a, b) => new Date(b.pub).getTime() - new Date(a.pub).getTime());
 
     return cards;
-  }, [sort, period, status]);
+  }, [sort, period, status, activeTopic]);
 
-  // 当筛选条件变化，重置分页
   useEffect(() => {
     setDisplayCount(PER_PAGE);
   }, [sort, period, status, activeTopic]);
 
-  // 无限滚动：IntersectionObserver 观察哨兵元素
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
@@ -239,15 +239,11 @@ export function CategoryPage({ slug }: CategoryPageProps) {
 
   const cards = filteredCards().slice(0, displayCount);
   const totalCount = filteredCards().length;
-  // 从 CATEGORY_META 取当前分类的名称和话题列表（找不到则提供默认值）
-  const meta = CATEGORY_META[slug];
-  const categoryLabel = meta?.label || slug;
-  const categoryTopics = meta?.topics || [{ key: "all", label: "全部", count: STABLE_CARDS.length }];
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "var(--font-fira-sans),sans-serif", color: "var(--text)" }}>
 
-      {/* ── Header（与首页一致）── */}
+      {/* ── Header ── */}
       <header>
         <div className="h-inner">
           <Logo />
@@ -256,10 +252,10 @@ export function CategoryPage({ slug }: CategoryPageProps) {
         </div>
       </header>
 
-      {/* ── 二级导航（当前分类高亮，其余可点击跳转）── */}
+      {/* ── 二级导航 ── */}
       <nav className="mnav">
         <div className="n-inner">
-          <button className="nitem hot" onClick={() => router.push("/trending")}>
+          <button className="nitem hot active" onClick={() => router.push("/trending")}>
             热门
             <svg viewBox="0 0 24 24"><path d="M17.66 11.2c-.23-.3-.51-.56-.77-.82-.67-.6-1.43-1.03-2.07-1.66C13.33 7.26 13 4.85 13.95 3c-.95.23-1.78.75-2.49 1.32-2.59 2.04-3.49 5.56-2.46 8.73.04.14.08.27.08.42 0 .28-.18.52-.46.62-.27.1-.56.01-.74-.21a5.27 5.27 0 01-.88-2.31c-1.12 1.52-1.68 3.48-1.49 5.47.12 1.22.57 2.41 1.29 3.39.81 1.08 1.91 1.87 3.17 2.27 1.41.44 2.97.41 4.37-.06 1.6-.54 2.94-1.69 3.67-3.21.78-1.61.87-3.51.18-5.19-.23-.57-.56-1.09-.97-1.55z"/></svg>
           </button>
@@ -268,7 +264,7 @@ export function CategoryPage({ slug }: CategoryPageProps) {
           {NAV_ITEMS.map((item) => (
             <button
               key={item.slug}
-              className={"nitem" + (item.slug === slug ? " active" : "")}
+              className="nitem"
               onClick={() => router.push(`/category/${item.slug}`)}
             >
               {item.label}
@@ -284,125 +280,85 @@ export function CategoryPage({ slug }: CategoryPageProps) {
             首页
           </button>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
-          <span style={{ color: "var(--text2)", fontWeight: 600 }}>{categoryLabel}</span>
+          <span style={{ color: "var(--text2)", fontWeight: 600 }}>热门调研</span>
         </div>
       </div>
 
-      {/* ── 主体：左侧边栏 + 右侧列表 ── */}
+      {/* ── 主体：全宽卡片列表 ── */}
       <div className="wrap" style={{ padding: "16px 24px 40px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 20, alignItems: "start" }}>
-
-          {/* ── 左侧：话题标签菜单 ── */}
-          <div style={{
-            background: "var(--card)", border: "1px solid var(--border)",
-            borderRadius: 12, overflow: "hidden", position: "sticky", top: 80,
-          }}>
-            {/* 菜单标题 */}
-            <div style={{
-              background: "var(--blue)", padding: "10px 14px",
-              fontSize: 12, fontWeight: 700, color: "#fff",
-              textTransform: "uppercase", letterSpacing: ".5px",
+        {/* 标题行 + 筛选 */}
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div className="sec-title" style={{ marginBottom: 0 }}>热门调研</div>
+            <span style={{
+              fontSize: 11.5, fontFamily: "var(--font-fira-code),monospace",
+              color: "var(--muted)", background: "rgba(0,0,0,.04)",
+              padding: "2px 8px", borderRadius: 5,
             }}>
-              {categoryLabel}
-            </div>
-            {/* 话题列表 */}
-            {categoryTopics.map((topic) => {
-              const isActive = activeTopic === topic.key;
-              return (
-                <button
-                  key={topic.key}
-                  onClick={() => setActiveTopic(topic.key)}
-                  style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    width: "100%", padding: "9px 14px",
-                    borderBottom: "1px solid var(--border)", border: "none",
-                    background: isActive ? "rgba(30,64,175,.07)" : "transparent",
-                    cursor: "pointer", fontFamily: "inherit", textAlign: "left",
-                    transition: ".15s",
-                    borderLeft: isActive ? "3px solid var(--blue)" : "3px solid transparent",
-                  }}
-                >
-                  <span style={{
-                    fontSize: 13, fontWeight: isActive ? 700 : 500,
-                    color: isActive ? "var(--blue)" : "var(--text2)",
-                  }}>
-                    {topic.label}
-                  </span>
-                  <span style={{
-                    fontSize: 11, fontFamily: "var(--font-fira-code),monospace",
-                    color: isActive ? "var(--blue)" : "var(--muted)",
-                    background: isActive ? "rgba(30,64,175,.1)" : "rgba(0,0,0,.04)",
-                    padding: "1px 6px", borderRadius: 4,
-                  }}>
-                    {topic.count}
-                  </span>
-                </button>
-              );
-            })}
+              {totalCount} 条
+            </span>
           </div>
 
-          {/* ── 右侧：标题 + 筛选 + 卡片网格 ── */}
-          <div>
-            {/* 区块标题行 */}
-            <div style={{
-              display: "flex", justifyContent: "space-between",
-              alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10,
-            }}>
-              {/* 左：sec-title 风格标题 + 数量 */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div className="sec-title" style={{ marginBottom: 0 }}>
-                  {categoryLabel}
-                </div>
-                <span style={{
-                  fontSize: 11.5, fontFamily: "var(--font-fira-code),monospace",
-                  color: "var(--muted)", background: "rgba(0,0,0,.04)",
-                  padding: "2px 8px", borderRadius: 5,
-                }}>
-                  {totalCount} 条
-                </span>
-              </div>
-
-              {/* 右：三个下拉筛选 */}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Select<SortKey>
-                  value={sort} onChange={setSort}
-                  options={SORT_OPTIONS} label="排序"
-                />
-                <Select<PeriodKey>
-                  value={period} onChange={setPeriod}
-                  options={PERIOD_OPTIONS} label="时段"
-                />
-                <Select<StatusKey>
-                  value={status} onChange={setStatus}
-                  options={STATUS_OPTIONS} label="状态"
-                />
-              </div>
-            </div>
-
-            {/* 卡片网格（与首页 card-grid 完全一致） */}
-            {cards.length === 0 ? (
-              <div style={{ textAlign: "center", padding: 48, color: "var(--muted)", fontSize: 14 }}>
-                暂无符合条件的调研
-              </div>
-            ) : (
-              <div className="card-grid">
-                {cards.map((d) => (
-                  <SurveyCard key={d.id} d={d} topics={topics} titles={titles} t={t} />
-                ))}
-              </div>
-            )}
-
-            {/* 加载指示 / 全部加载完 */}
-            {loading && (
-              <div className="load-ind"><div className="spinner"></div></div>
-            )}
-            {!loading && displayCount >= totalCount && totalCount > 0 && (
-              <div className="load-ind" style={{ color: "var(--muted)" }}>— 全部加载完成 —</div>
-            )}
-            {/* 无限滚动哨兵 */}
-            <div ref={sentinelRef} style={{ height: 1 }} />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Select<SortKey>
+              value={sort} onChange={setSort}
+              options={SORT_OPTIONS} label="排序"
+            />
+            <Select<PeriodKey>
+              value={period} onChange={setPeriod}
+              options={PERIOD_OPTIONS} label="时段"
+            />
+            <Select<StatusKey>
+              value={status} onChange={setStatus}
+              options={STATUS_OPTIONS} label="状态"
+            />
           </div>
         </div>
+
+        {/* 话题 Chip 标签行 */}
+        <div className="filter-row">
+          {TRENDING_TOPICS.map((topic) => (
+            <button
+              key={topic.key}
+              className={"f-tag" + (activeTopic === topic.key ? " active" : "")}
+              onClick={() => setActiveTopic(topic.key)}
+            >
+              {topic.label}
+              <span style={{
+                marginLeft: 5,
+                fontSize: 11,
+                fontFamily: "var(--font-fira-code),monospace",
+                opacity: activeTopic === topic.key ? 1 : 0.6,
+              }}>
+                {topic.count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* 卡片网格 */}
+        {cards.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 48, color: "var(--muted)", fontSize: 14 }}>
+            暂无符合条件的调研
+          </div>
+        ) : (
+          <div className="card-grid">
+            {cards.map((d) => (
+              <SurveyCard key={d.id} d={d} topics={topics} titles={titles} t={t} />
+            ))}
+          </div>
+        )}
+
+        {loading && (
+          <div className="load-ind"><div className="spinner"></div></div>
+        )}
+        {!loading && displayCount >= totalCount && totalCount > 0 && (
+          <div className="load-ind" style={{ color: "var(--muted)" }}>— 全部加载完成 —</div>
+        )}
+        <div ref={sentinelRef} style={{ height: 1 }} />
       </div>
     </div>
   );

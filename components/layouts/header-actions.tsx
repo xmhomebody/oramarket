@@ -3,6 +3,7 @@
 // 顶部右侧操作区：未登录显示「登录/注册」；登录后显示
 // 调研组合 / 可用积分 / 兑换积分(礼物) / 通知(铃铛) / 用户头像(下拉菜单)
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useLanguage } from "@/components/providers/language-provider";
 import { type Lang } from "@/lib/i18n/dict";
@@ -15,25 +16,50 @@ const LANGS: { key: Lang; label: string }[] = [
   { key: "en", label: "English" },
 ];
 
+// 通知类型（结合站点业务：赢/输结算、积分兑换、入分、关注动态、系统）
+type NotifType = "win" | "lose" | "redeem" | "credit" | "follow" | "system";
+interface Notif { id: number; type: NotifType; text: string; amount?: number; time: string; unread: boolean }
+const INITIAL_NOTIFS: Notif[] = [
+  { id: 1, type: "win",    text: "「美国公共医保是否扩大覆盖至全民」已结算，您预测正确，获得", amount: 1280, time: "2 小时前", unread: true },
+  { id: 2, type: "credit", text: "每日签到奖励已到账，获得", amount: 200, time: "5 小时前", unread: true },
+  { id: 3, type: "follow", text: "您关注的「全国教育经费预算上调 15%」将于 24 小时后截止，记得及时下注", time: "8 小时前", unread: true },
+  { id: 4, type: "redeem", text: "您兑换的「滴滴出行 ¥20 打车券」已发放，可在兑换记录中查看卡密", time: "1 天前", unread: false },
+  { id: 5, type: "lose",   text: "「城市住房可负担指数是否改善」已结算，本次预测未命中", time: "1 天前", unread: false },
+  { id: 6, type: "follow", text: "您关注的「气候政策法案能否按期通过」积分池突破 50 万", time: "2 天前", unread: false },
+  { id: 7, type: "win",    text: "「数字政务服务采用率是否超 80%」已结算，您预测正确，获得", amount: 860, time: "2 天前", unread: false },
+  { id: 8, type: "system", text: "积分兑换上新：新增京东 E 卡、视频会员等多款热门权益，快来兑换吧", time: "3 天前", unread: false },
+];
+
 export function HeaderActions() {
   const { user, portfolio, points, login, logout } = useAuth();
   const { t, lang, setLang } = useLanguage();
+  const router = useRouter();
 
-  // 登录弹窗 / 下拉菜单 / 语言子菜单 的开关
+  // 登录弹窗 / 下拉菜单 / 语言子菜单 / 通知面板 的开关
   const [modalOpen, setModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [langExpand, setLangExpand] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState<Notif[]>(INITIAL_NOTIFS);
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
 
   const menuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
 
-  // 点击菜单外部关闭下拉
+  const unreadCount = notifs.filter((n) => n.unread).length;
+  const markRead = (id: number) => setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+  const markAllRead = () => setNotifs((prev) => prev.map((n) => ({ ...n, unread: false })));
+
+  // 点击菜单/通知面板外部关闭下拉
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
         setLangExpand(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -67,25 +93,45 @@ export function HeaderActions() {
       {/* ── 已登录：积分组合 + 图标 + 头像 ── */}
       {user && (
         <div style={{ display: "flex", alignItems: "center", gap: 18, marginLeft: "auto" }}>
-          {/* 调研组合 */}
-          <div style={{ textAlign: "right", lineHeight: 1.2 }}>
+          {/* 调研组合（可点击进入组合页，hover 高亮） */}
+          <button
+            onClick={() => router.push("/portfolio")}
+            title="查看我的调研组合"
+            style={{
+              textAlign: "right", lineHeight: 1.2, cursor: "pointer",
+              background: "transparent", border: "none", fontFamily: "inherit",
+              padding: "5px 10px", borderRadius: 8, transition: ".15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,.12)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
             <div style={{ fontSize: 10, color: "rgba(255,255,255,.6)" }}>调研组合</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "var(--font-fira-code),monospace" }}>
               {fmt(portfolio)}
             </div>
-          </div>
-          {/* 可用积分 */}
-          <div style={{ textAlign: "right", lineHeight: 1.2 }}>
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,.6)" }}>可用积分</div>
+          </button>
+          {/* 积分余额（可点击查看积分记录，hover 高亮） */}
+          <button
+            onClick={() => router.push("/points")}
+            title="查看积分记录"
+            style={{
+              textAlign: "right", lineHeight: 1.2, cursor: "pointer",
+              background: "transparent", border: "none", fontFamily: "inherit",
+              padding: "5px 10px", borderRadius: 8, transition: ".15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,.12)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,.6)" }}>积分余额</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#FCD34D", fontFamily: "var(--font-fira-code),monospace" }}>
               {fmt(points)}
             </div>
-          </div>
+          </button>
 
           {/* 礼物 + 铃铛 图标组（两者间距为整体 gap 的一半 9px） */}
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
             {/* 兑换积分（礼物） */}
-            <IconBtn title="兑换积分">
+            <IconBtn title="兑换积分" onClick={() => router.push("/redeem")}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8">
                 <polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" />
                 <line x1="12" y1="22" x2="12" y2="7" />
@@ -93,14 +139,100 @@ export function HeaderActions() {
               </svg>
             </IconBtn>
 
-            {/* 通知（铃铛） */}
-            <IconBtn title="通知">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8">
-                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
-              </svg>
-              {/* 未读小红点 */}
-              <span style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--blue-d)" }} />
-            </IconBtn>
+            {/* 通知（铃铛） + 通知面板 */}
+            <div style={{ position: "relative" }} ref={notifRef}>
+              <IconBtn title="通知" onClick={() => setNotifOpen((v) => !v)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8">
+                  <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" />
+                </svg>
+                {/* 未读小红点 */}
+                {unreadCount > 0 && (
+                  <span style={{ position: "absolute", top: 4, right: 4, width: 7, height: 7, borderRadius: "50%", background: "var(--red)", border: "1.5px solid var(--blue-d)" }} />
+                )}
+              </IconBtn>
+
+              {/* 通知下拉面板 */}
+              {notifOpen && (
+                <div style={{
+                  position: "absolute", top: "calc(100% + 12px)", right: 0, zIndex: 1100,
+                  width: 384, background: "var(--card)", borderRadius: 12,
+                  boxShadow: "0 12px 40px rgba(0,0,0,.18)", border: "1px solid var(--border)", overflow: "hidden",
+                }}>
+                  {/* 面板头部 */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: "var(--blue-d)" }}>通知</span>
+                      {unreadCount > 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--red)", borderRadius: 10, padding: "1px 7px", lineHeight: 1.6 }}>
+                          {unreadCount}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      {unreadCount > 0 && (
+                        <button
+                          onClick={markAllRead}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--blue)", fontSize: 12, fontWeight: 600, fontFamily: "inherit", padding: "4px 6px", borderRadius: 6 }}
+                        >
+                          全部已读
+                        </button>
+                      )}
+                      <button title="通知设置" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", padding: 4, display: "flex" }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <circle cx="12" cy="12" r="3" />
+                          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 通知列表 */}
+                  <div style={{ maxHeight: 440, overflowY: "auto" }}>
+                    {notifs.length === 0 ? (
+                      <div style={{ padding: "48px 20px", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>暂无通知</div>
+                    ) : notifs.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => markRead(n.id)}
+                        style={{
+                          display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 16px",
+                          borderBottom: "1px solid var(--border)", cursor: "pointer", transition: ".1s",
+                          background: n.unread ? "rgba(37,99,235,.045)" : "transparent",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = n.unread ? "rgba(37,99,235,.045)" : "transparent")}
+                      >
+                        {/* 未读圆点 */}
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: n.unread ? "var(--blue)" : "transparent", flexShrink: 0, marginTop: 13 }} />
+                        {/* 类型图标 */}
+                        <span style={{
+                          width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          background: notifTint(n.type), color: notifColor(n.type),
+                        }}>
+                          <NotifIcon type={n.type} />
+                        </span>
+                        {/* 内容 + 时间 */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            fontSize: 13, lineHeight: 1.5, color: "var(--text)",
+                            display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+                          }}>
+                            {n.text}
+                            {n.amount != null && (
+                              <b style={{ color: "var(--green)", fontFamily: "var(--font-fira-code),monospace", marginLeft: 4 }}>
+                                +{fmt(n.amount)} 积分
+                              </b>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 4 }}>{n.time}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 用户头像 + 下拉菜单 */}
@@ -142,9 +274,9 @@ export function HeaderActions() {
                 <Divider />
 
                 {/* 第一组：业务入口 */}
-                <MenuItem icon="star" label="关注的调研" onClick={() => setMenuOpen(false)} />
-                <MenuItem icon="grid" label="调研组合" onClick={() => setMenuOpen(false)} />
-                <MenuItem icon="gift" label="积分兑换" onClick={() => setMenuOpen(false)} />
+                <MenuItem icon="star" label="关注的调研" onClick={() => { router.push("/follows?from=home"); setMenuOpen(false); }} />
+                <MenuItem icon="grid" label="调研组合" onClick={() => { router.push("/portfolio"); setMenuOpen(false); }} />
+                <MenuItem icon="gift" label="积分兑换" onClick={() => { router.push("/redeem"); setMenuOpen(false); }} />
                 <MenuItem icon="trophy" label="排行榜" onClick={() => setMenuOpen(false)} />
 
                 <Divider />
@@ -284,10 +416,11 @@ export function HeaderActions() {
 }
 
 // ── 头部圆形图标按钮 ──
-function IconBtn({ children, title }: { children: React.ReactNode; title: string }) {
+function IconBtn({ children, title, onClick }: { children: React.ReactNode; title: string; onClick?: () => void }) {
   return (
     <button
       title={title}
+      onClick={onClick}
       style={{
         position: "relative", width: 34, height: 34, borderRadius: 8,
         background: "rgba(255,255,255,.08)", border: "none", cursor: "pointer",
@@ -345,6 +478,45 @@ function MenuIcon({ name, danger }: { name: string; danger?: boolean }) {
     logout: <><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></>,
   };
   return <svg {...common}>{paths[name]}</svg>;
+}
+
+// ── 通知类型颜色 / 底色 / 图标 ──
+function notifColor(type: NotifType): string {
+  switch (type) {
+    case "win":    return "var(--green)";
+    case "lose":   return "var(--red)";
+    case "redeem": return "var(--amber)";
+    case "credit": return "var(--green)";
+    case "follow": return "var(--blue)";
+    default:       return "var(--text2)";
+  }
+}
+function notifTint(type: NotifType): string {
+  switch (type) {
+    case "win":    return "rgba(22,163,74,.12)";
+    case "lose":   return "rgba(220,38,38,.12)";
+    case "redeem": return "rgba(217,119,6,.13)";
+    case "credit": return "rgba(22,163,74,.12)";
+    case "follow": return "rgba(37,99,235,.12)";
+    default:       return "rgba(100,116,139,.12)";
+  }
+}
+function NotifIcon({ type }: { type: NotifType }) {
+  const common = { width: 17, height: 17, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 } as const;
+  switch (type) {
+    case "win":
+      return <svg {...common}><path d="M6 9H4.5a2.5 2.5 0 010-5H6" /><path d="M18 9h1.5a2.5 2.5 0 000-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" /><path d="M18 2H6v7a6 6 0 0012 0V2z" /></svg>;
+    case "lose":
+      return <svg {...common}><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" /></svg>;
+    case "redeem":
+      return <svg {...common}><polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" /><line x1="12" y1="22" x2="12" y2="7" /><path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" /></svg>;
+    case "credit":
+      return <svg {...common}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
+    case "follow":
+      return <svg {...common}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>;
+    default:
+      return <svg {...common}><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>;
+  }
 }
 
 const labelStyle: React.CSSProperties = {

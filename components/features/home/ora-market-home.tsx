@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import Chart from "chart.js/auto";
 import { useLanguage } from "@/components/providers/language-provider";
 import { HeaderActions } from "@/components/layouts/header-actions";
+import { Logo } from "@/components/layouts/site-logo";
 import { HeaderSearch } from "@/components/layouts/header-search";
 import { type Lang, translate, TOPICS_I18N, TITLES_I18N } from "@/lib/i18n/dict";
 import {
@@ -141,10 +142,14 @@ export function OraMarketHome() {
         if (title) title.textContent = t(d.title);
         const meta = slide.querySelector(".c-meta");
         if (meta) {
-          meta.innerHTML = `<span><span class="c-pool-val">${d.pool}${t("unit_pts")}</span> ${t("carousel_pool")}</span>
-            <span>${t("card_published")}: ${d.published}</span>
-            <span>${t("carousel_deadline")}: ${d.deadline}</span>
-            <span>${d.parts} ${t("carousel_participants")}</span>`;
+          const coinIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.8" style="flex-shrink:0"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>`;
+          const usersIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>`;
+          const clockIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
+          meta.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:4px">${coinIcon}<b style="font-family:var(--font-fira-code),monospace;color:var(--blue)">${d.pool}</b><span>${t("carousel_pool")}</span></span>
+            <span style="display:inline-flex;align-items:center;gap:4px">${usersIcon}${d.parts} ${t("carousel_participants")}</span>
+            <span>${t("card_published")} ${d.published}</span>
+            <span style="display:inline-flex;align-items:center;gap:4px">${clockIcon}${t("card_closes")} ${d.deadline}</span>`;
         }
         const tagsEl = slide.querySelector(".c-tags");
         if (tagsEl) {
@@ -265,7 +270,7 @@ export function OraMarketHome() {
       div.innerHTML = `
         <div class="pc-title">${cardTitle}</div>
         <div class="pc-pool">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>
           <span class="pc-pool-n">${fmt(d.pool)}</span><span class="pc-pool-l">${t("card_pts_pool")}</span>
         </div>
         <div class="pc-vote">
@@ -485,6 +490,8 @@ export function OraMarketHome() {
     // ── 交互事件绑定 ──
     // 导航：有分类页的菜单项点击后跳转，其余只高亮
     const NAV_ROUTES: Record<string, string> = {
+      nav_trending:          "/trending",
+      nav_latest:            "/latest",
       nav_public_services:   "/category/public-services",
       nav_policy_research:   "/category/policy-research",
       nav_satisfaction_survey: "/category/satisfaction-survey",
@@ -560,17 +567,7 @@ export function OraMarketHome() {
       {/* ══ HEADER ══ */}
       <header>
         <div className="h-inner">
-          <a className="logo" href="#">
-            <div className="logo-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="3.5" fill="#fff" />
-                <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M5.6 5.6l1.77 1.77M16.63 16.63l1.77 1.77M5.6 18.4l1.77-1.77M16.63 7.37l1.77-1.77" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </div>
-            <span className="logo-text">
-              Ora<em>Market</em>
-            </span>
-          </a>
+          <Logo />
           <HeaderSearch />
           <HeaderActions />
         </div>
@@ -815,12 +812,7 @@ export function OraMarketHome() {
         <div className="wrap">
           <div className="f-grid">
             <div className="f-brand">
-              <div className="logo">
-                <div className="logo-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.5" fill="#fff" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" /></svg>
-                </div>
-                <span className="logo-text">Ora<em>Market</em></span>
-              </div>
+              <img src="/img/logo.png" alt="OraMarket" style={{ height: 36, width: "auto", display: "block", marginBottom: 8 }} />
               <p data-i18n="footer_desc">领先的中国预言机，专注政策结果、公众调查与社区预测。</p>
             </div>
             <div className="f-nav">

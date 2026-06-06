@@ -81,7 +81,7 @@ export function HeaderSearch({
 
   // ── 深色变体：用于表头（沿用原 .search-wrap 样式，放大镜在右侧）──
   return (
-    <div className="search-wrap">
+    <div className="search-wrap" style={{ marginLeft: 20 }}>
       <input
         type="text"
         placeholder="搜索调研、话题、事件…"
