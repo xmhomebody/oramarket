@@ -351,19 +351,11 @@ export function HeaderActions() {
               </svg>
             </button>
 
-            {/* Logo + 标题 */}
-            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
-              <div className="logo-icon" style={{ width: 30, height: 30 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="3.5" fill="#fff" />
-                  <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </div>
-              <span style={{ fontFamily: "var(--font-fira-code),monospace", fontWeight: 700, fontSize: 18, color: "var(--blue-d)" }}>
-                Ora<span style={{ color: "var(--red)" }}>Market</span>
-              </span>
+            {/* Logo（图片版） */}
+            <div style={{ marginBottom: 22 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/img/logo_login.png" alt="OraMarket" style={{ height: 48, width: "auto", display: "block" }} />
             </div>
-            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 22 }}>手机号登录 / 注册</p>
 
             {/* 手机号 */}
             <label style={labelStyle}>手机号</label>
