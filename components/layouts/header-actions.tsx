@@ -277,7 +277,7 @@ export function HeaderActions() {
                 <MenuItem icon="star" label="关注的调研" onClick={() => { router.push("/follows?from=home"); setMenuOpen(false); }} />
                 <MenuItem icon="grid" label="调研组合" onClick={() => { router.push("/portfolio"); setMenuOpen(false); }} />
                 <MenuItem icon="gift" label="积分兑换" onClick={() => { router.push("/redeem"); setMenuOpen(false); }} />
-                <MenuItem icon="trophy" label="排行榜" onClick={() => setMenuOpen(false)} />
+                <MenuItem icon="trophy" label="排行榜" onClick={() => { router.push("/leaderboard"); setMenuOpen(false); }} />
 
                 <Divider />
 

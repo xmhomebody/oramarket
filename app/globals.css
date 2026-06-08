@@ -414,6 +414,37 @@ nav.mnav{background:var(--blue);border-bottom:1px solid rgba(255,255,255,.12)}
 .lb-mtab:hover{color:#fff;border-color:rgba(255,255,255,.4)}
 .lb-mtab.active{background:var(--red);border-color:var(--red);color:#fff}
 
+/* 排行榜独立页面：放大版（沿用 lb-* 样式，仅放大尺寸） */
+.lb-page .lb-head{padding:16px 20px}
+.lb-page .lb-ttl{font-size:15px;margin-bottom:2px}
+.lb-page .lb-list{padding:0;max-height:none}
+.lb-page .lb-item{padding:13px 20px;cursor:default}
+.lb-page .lb-rank{width:26px;font-size:14px}
+.lb-page .lb-av{width:38px;height:38px;font-size:14px}
+.lb-page .lb-name{font-size:14px}
+.lb-page .lb-acc{font-size:11.5px;margin-top:2px}
+.lb-page .lb-pts{font-size:15px}
+
+/* 排行榜仪表盘布局 */
+.lb-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lb-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:3px;gap:2px}
+.lb-seg button{padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--text2);background:transparent;transition:.15s;white-space:nowrap}
+.lb-seg button:hover{color:var(--blue-d)}
+.lb-seg button.on{background:var(--blue);color:#fff}
+.lb-seg button.on.red{background:var(--red)}
+.lb-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.lb-dash{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(0,1fr);gap:16px;align-items:start}
+.lb-charts{display:flex;flex-direction:column;gap:16px;min-width:0}
+.lb-cardx{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.lb-cardx-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px}
+.lb-cardx-t{font-size:13.5px;font-weight:700;color:var(--blue-d)}
+.lb-cardx-s{font-size:11px;color:var(--muted);font-family:var(--font-fira-code),monospace}
+.lb-kpi-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.lb-kpi-sub b{font-family:var(--font-fira-code),monospace;color:var(--text2);font-weight:700}
+@media(max-width:1040px){.lb-dash{grid-template-columns:1fr}}
+@media(max-width:760px){.lb-kpis{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:460px){.lb-kpis{grid-template-columns:1fr}}
+
 /* live redemption stack */
 .live-panel{background:var(--card);border:1px solid var(--border);border-radius:11px;overflow:hidden}
 .live-head{background:var(--blue-d);padding:11px 14px;display:flex;justify-content:space-between;align-items:center}
