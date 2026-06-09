@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: var(--font-fira-sans), sans-serif;
+  --font-mono: var(--font-fira-code), monospace;
+  --font-heading: var(--font-fira-sans), sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -46,6 +46,26 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* OraMarket 品牌色板（保留原站蓝/红视觉）。
+   暴露为 Tailwind 工具类：bg-brand-blue / text-brand-red / border-brand-border 等。
+   字面量 hex 用普通 @theme（非 inline）即可生成静态工具类。 */
+@theme {
+  --color-brand-blue: #1e40af;
+  --color-brand-blue-l: #3b82f6;
+  --color-brand-blue-d: #1e3a8a;
+  --color-brand-red: #dc2626;
+  --color-brand-red-l: #ef4444;
+  --color-brand-green: #16a34a;
+  --color-brand-purple: #7c3aed;
+  --color-brand-amber: #d97706;
+  --color-brand-bg: #eef2f7;
+  --color-brand-card: #ffffff;
+  --color-brand-border: #e2e8f0;
+  --color-brand-text: #1e3a8a;
+  --color-brand-text2: #475569;
+  --color-brand-muted: #94a3b8;
 }
 
 :root {
@@ -134,7 +154,10 @@
    说明：为保证设计/风格像素级一致，这里保留原始 CSS。
    字体字面量已替换为 next/font 注入的 --font-fira-* 变量。
    ============================================================ */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+/* 注意：原通配重置（box-sizing + margin 0 + padding 0）已移除。
+   它是「未分层 unlayered」规则，会盖过 @layer utilities 里的 Tailwind 间距类，
+   导致 padding、margin、mx-auto 等全部失效。Tailwind v4 preflight 已在
+   @layer base 内提供等价重置，分层正确、工具类可正常覆盖，故此行冗余且有害。 */
 :root{
   --blue:#1E40AF;--blue-l:#3B82F6;--blue-d:#1E3A8A;
   --red:#DC2626;--red-l:#EF4444;
@@ -453,7 +476,7 @@ nav.mnav{background:var(--blue);border-bottom:1px solid rgba(255,255,255,.12)}
 .live-dot{width:8px;height:8px;border-radius:50%;background:#34D399;animation:livePulse 1.6s infinite}
 @keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 6px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
 .live-list{padding:4px 0;max-height:360px;overflow:hidden}
-.live-item{display:flex;gap:9px;padding:8px 13px;border-bottom:1px solid #F1F5F9;align-items:center;transition:opacity .4s,transform .4s;animation:liveFlash 1.3s ease}
+.live-item{display:flex;gap:9px;padding:10px 13px;border-bottom:1px solid #F1F5F9;align-items:center;transition:opacity .4s,transform .4s;animation:liveFlash 1.3s ease}
 .live-item:last-child{border:none}
 @keyframes liveFlash{0%{background:rgba(34,197,94,.16)}100%{background:transparent}}
 .live-item.enter{opacity:0;transform:translateY(-12px)}
@@ -462,7 +485,7 @@ nav.mnav{background:var(--blue);border-bottom:1px solid rgba(255,255,255,.12)}
 .li-top{display:flex;justify-content:space-between;align-items:baseline}
 .li-name{font-size:12px;font-weight:600;color:var(--text)}
 .li-time{font-size:9.5px;color:var(--muted);flex-shrink:0;margin-left:6px}
-.li-act{font-size:11px;color:var(--text2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li-act{font-size:11px;color:var(--text2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .li-act b{color:var(--blue-d);font-weight:600}
 .li-pts{font-family:var(--font-fira-code),monospace;color:var(--green);font-weight:600}
 

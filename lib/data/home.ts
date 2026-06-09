@@ -73,20 +73,20 @@ export const REGIONS: RegionItem[] = [
 ];
 
 // 侧栏调研项（最新 / 热门）
-export interface SideSurvey { key: string; pool: string; y: number; oY: string; oN: string }
+export interface SideSurvey { id: number; key: string; pool: string; y: number; oY: string; oN: string }
 export const LATEST_SURVEYS: SideSurvey[] = [
-  { key: 'lp1', pool: '12K', y: 58, oY: '1.72', oN: '2.38' },
-  { key: 'lp2', pool: '8K', y: 37, oY: '2.70', oN: '1.58' },
-  { key: 'lp3', pool: '21K', y: 71, oY: '1.40', oN: '3.44' },
-  { key: 'lp4', pool: '45K', y: 82, oY: '1.21', oN: '5.55' },
-  { key: 'lp5', pool: '9K', y: 46, oY: '2.17', oN: '1.85' },
+  { id: 24, key: 'lp1', pool: '12K', y: 58, oY: '1.72', oN: '2.38' },
+  { id: 25, key: 'lp2', pool: '8K',  y: 37, oY: '2.70', oN: '1.58' },
+  { id: 26, key: 'lp3', pool: '21K', y: 71, oY: '1.40', oN: '3.44' },
+  { id: 22, key: 'lp4', pool: '45K', y: 82, oY: '1.21', oN: '5.55' },
+  { id: 23, key: 'lp5', pool: '9K',  y: 46, oY: '2.17', oN: '1.85' },
 ];
 export const HOT_SURVEYS: SideSurvey[] = [
-  { key: 'hp1', pool: '124K', y: 66, oY: '1.51', oN: '2.94' },
-  { key: 'hp2', pool: '89K', y: 41, oY: '2.43', oN: '1.69' },
-  { key: 'hp3', pool: '75K', y: 53, oY: '1.88', oN: '2.12' },
-  { key: 'hp4', pool: '62K', y: 79, oY: '1.26', oN: '4.76' },
-  { key: 'hp5', pool: '51K', y: 28, oY: '3.57', oN: '1.38' },
+  { id: 1,  key: 'hp1', pool: '124K', y: 66, oY: '1.51', oN: '2.94' },
+  { id: 7,  key: 'hp2', pool: '89K',  y: 41, oY: '2.43', oN: '1.69' },
+  { id: 13, key: 'hp3', pool: '75K',  y: 53, oY: '1.88', oN: '2.12' },
+  { id: 5,  key: 'hp4', pool: '62K',  y: 79, oY: '1.26', oN: '4.76' },
+  { id: 11, key: 'hp5', pool: '51K',  y: 28, oY: '3.57', oN: '1.38' },
 ];
 
 // 三个热门话题卡片

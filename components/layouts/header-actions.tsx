@@ -31,7 +31,7 @@ const INITIAL_NOTIFS: Notif[] = [
 ];
 
 export function HeaderActions() {
-  const { user, portfolio, points, login, logout } = useAuth();
+  const { user, portfolio, points, sendCode, loginWithPassword, loginWithCode, logout } = useAuth();
   const { t, lang, setLang } = useLanguage();
   const router = useRouter();
 
@@ -41,11 +41,26 @@ export function HeaderActions() {
   const [langExpand, setLangExpand] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>(INITIAL_NOTIFS);
+
+  // 登录表单状态
+  const [tab, setTab] = useState<"code" | "password">("code"); // 当前登录方式 tab
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState(""); // 错误提示
+  const [hint, setHint] = useState(""); // 提示（开发环境验证码）
+  const [submitting, setSubmitting] = useState(false); // 登录请求中
+  const [countdown, setCountdown] = useState(0); // 验证码倒计时（秒）
 
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  // 验证码倒计时
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const id = setTimeout(() => setCountdown((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [countdown]);
 
   const unreadCount = notifs.filter((n) => n.unread).length;
   const markRead = (id: number) => setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
@@ -66,16 +81,67 @@ export function HeaderActions() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // 提交登录
-  function handleLogin() {
-    if (!/^\d{6,}$/.test(phone)) {
-      alert("请输入有效的手机号");
-      return;
-    }
-    login(phone);
+  const phoneValid = /^1\d{10}$/.test(phone);
+
+  // 关闭并重置登录弹窗
+  function closeModal() {
     setModalOpen(false);
     setPhone("");
     setCode("");
+    setPassword("");
+    setErr("");
+    setHint("");
+    setSubmitting(false);
+  }
+
+  // 切换登录方式 tab
+  function switchTab(next: "code" | "password") {
+    setTab(next);
+    setErr("");
+    setHint("");
+  }
+
+  // 获取验证码
+  async function handleSendCode() {
+    setErr("");
+    setHint("");
+    if (!phoneValid) {
+      setErr("请输入有效的手机号");
+      return;
+    }
+    const res = await sendCode(phone);
+    if (!res.ok) {
+      setErr(res.error);
+      return;
+    }
+    setCountdown(60);
+    // 开发环境无短信服务商，直接展示验证码便于测试
+    if (res.devCode) setHint(`开发环境验证码：${res.devCode}`);
+  }
+
+  // 提交登录
+  async function handleLogin() {
+    setErr("");
+    if (!phoneValid) {
+      setErr("请输入有效的手机号");
+      return;
+    }
+    if (tab === "code" && !code) {
+      setErr("请输入验证码");
+      return;
+    }
+    if (tab === "password" && !password) {
+      setErr("请输入密码");
+      return;
+    }
+    setSubmitting(true);
+    const res = tab === "code" ? await loginWithCode(phone, code) : await loginWithPassword(phone, password);
+    setSubmitting(false);
+    if (!res.ok) {
+      setErr(res.error);
+      return;
+    }
+    closeModal();
   }
 
   const curLangLabel = LANGS.find((l) => l.key === lang)?.label ?? "简体中文";
@@ -326,7 +392,7 @@ export function HeaderActions() {
       {/* ── 登录弹窗 ── */}
       {modalOpen && (
         <div
-          onClick={() => setModalOpen(false)}
+          onClick={closeModal}
           style={{
             position: "fixed", inset: 0, zIndex: 2000,
             background: "rgba(15,23,42,.55)", backdropFilter: "blur(2px)",
@@ -342,7 +408,7 @@ export function HeaderActions() {
             }}
           >
             {/* 关闭按钮 */}
-            <button onClick={() => setModalOpen(false)} style={{
+            <button onClick={closeModal} style={{
               position: "absolute", top: 16, right: 16, background: "none", border: "none",
               cursor: "pointer", color: "var(--muted)", padding: 4,
             }}>
@@ -352,12 +418,36 @@ export function HeaderActions() {
             </button>
 
             {/* Logo（图片版） */}
-            <div style={{ marginBottom: 22 }}>
+            <div style={{ marginBottom: 20 }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/img/logo_login.png" alt="OraMarket" style={{ height: 48, width: "auto", display: "block" }} />
             </div>
 
-            {/* 手机号 */}
+            {/* 登录方式 tab：验证码登录 / 密码登录 */}
+            <div style={{ display: "flex", gap: 24, borderBottom: "1px solid var(--border)", marginBottom: 18 }}>
+              {([
+                { key: "code", label: "验证码登录" },
+                { key: "password", label: "密码登录" },
+              ] as const).map((tb) => (
+                <button
+                  key={tb.key}
+                  onClick={() => switchTab(tb.key)}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer", fontFamily: "inherit",
+                    padding: "0 0 10px", fontSize: 14, position: "relative",
+                    fontWeight: tab === tb.key ? 700 : 500,
+                    color: tab === tb.key ? "var(--blue)" : "var(--text2)",
+                  }}
+                >
+                  {tb.label}
+                  {tab === tb.key && (
+                    <span style={{ position: "absolute", left: 0, right: 0, bottom: -1, height: 2, borderRadius: 2, background: "var(--blue)" }} />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* 手机号（两种方式共用） */}
             <label style={labelStyle}>手机号</label>
             <div style={{ display: "flex", alignItems: "center", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden", marginBottom: 14 }}>
               <span style={{ padding: "0 10px", fontSize: 13.5, color: "var(--text2)", borderRight: "1px solid var(--border)", lineHeight: "40px" }}>+86</span>
@@ -370,35 +460,67 @@ export function HeaderActions() {
               />
             </div>
 
-            {/* 验证码 */}
-            <label style={labelStyle}>验证码</label>
-            <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
-              <input
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                placeholder="请输入验证码"
-                maxLength={6}
-                style={{ ...inputStyle, border: "1px solid var(--border)", borderRadius: 8, padding: "0 12px" }}
-              />
-              <button style={{
-                flexShrink: 0, padding: "0 14px", borderRadius: 8, cursor: "pointer",
-                border: "1px solid var(--blue)", background: "transparent", color: "var(--blue)",
-                fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", whiteSpace: "nowrap",
-              }}>
-                获取验证码
-              </button>
+            {/* 按 tab 切换：验证码 / 密码 */}
+            {tab === "code" ? (
+              <>
+                <label style={labelStyle}>验证码</label>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                    onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                    placeholder="请输入验证码"
+                    maxLength={6}
+                    style={{ ...inputStyle, border: "1px solid var(--border)", borderRadius: 8, padding: "0 12px" }}
+                  />
+                  <button
+                    onClick={handleSendCode}
+                    disabled={countdown > 0 || !phoneValid}
+                    style={{
+                      flexShrink: 0, padding: "0 14px", borderRadius: 8,
+                      cursor: countdown > 0 || !phoneValid ? "not-allowed" : "pointer",
+                      background: "transparent", fontSize: 12.5, fontWeight: 600,
+                      fontFamily: "inherit", whiteSpace: "nowrap",
+                      border: `1px solid ${countdown > 0 || !phoneValid ? "var(--border)" : "var(--blue)"}`,
+                      color: countdown > 0 || !phoneValid ? "var(--muted)" : "var(--blue)",
+                    }}
+                  >
+                    {countdown > 0 ? `${countdown}s 后重发` : "获取验证码"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <label style={labelStyle}>密码</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+                  placeholder="请输入密码"
+                  style={{ ...inputStyle, width: "100%", boxSizing: "border-box", marginBottom: 8, border: "1px solid var(--border)", borderRadius: 8, padding: "0 12px" }}
+                />
+              </>
+            )}
+
+            {/* 错误 / 提示行（占位避免布局跳动） */}
+            <div style={{ minHeight: 18, marginBottom: 10 }}>
+              {err && <span style={{ fontSize: 12, color: "var(--red)" }}>{err}</span>}
+              {!err && hint && <span style={{ fontSize: 12, color: "var(--blue)" }}>{hint}</span>}
             </div>
 
             {/* 登录按钮 */}
-            <button onClick={handleLogin} style={{
+            <button onClick={handleLogin} disabled={submitting} style={{
               width: "100%", padding: "11px 0", borderRadius: 8, border: "none",
               background: "var(--blue)", color: "#fff", fontSize: 14.5, fontWeight: 700,
-              cursor: "pointer", fontFamily: "inherit", letterSpacing: ".3px",
+              cursor: submitting ? "not-allowed" : "pointer", fontFamily: "inherit",
+              letterSpacing: ".3px", opacity: submitting ? 0.7 : 1,
             }}>
-              登录
+              {submitting ? "登录中…" : "登录"}
             </button>
             <p style={{ marginTop: 14, fontSize: 11, color: "var(--muted)", textAlign: "center", lineHeight: 1.6 }}>
-              未注册的手机号验证后将自动创建账号<br />登录即代表同意《用户协议》与《隐私政策》
+              {tab === "code" ? "未注册的手机号验证后将自动创建账号" : "首次使用请用验证码登录"}
+              <br />登录即代表同意《用户协议》与《隐私政策》
             </p>
           </div>
         </div>

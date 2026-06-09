@@ -1,6 +1,7 @@
 "use client";
 
 // 调研组合页 —— 左侧关注的调研（独占左边、全高）；右侧调研详情 + 我的调研组合（同宽）
+// 积分模型：积分余额(points) + 调研组合积分(portfolio=进行中下注之和) = 总积分价值
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Chart from "chart.js/auto";
@@ -10,10 +11,9 @@ import { HeaderActions } from "@/components/layouts/header-actions";
 import { Logo } from "@/components/layouts/site-logo";
 import { HeaderSearch } from "@/components/layouts/header-search";
 import { UnfollowMenu, ctxMenuFrom, type CtxMenuState } from "@/components/layouts/unfollow-menu";
-import { TITLES_I18N, TOPICS_I18N } from "@/lib/i18n/dict";
-import {
-  STABLE_CARDS, TREND_DATES, fmt, type PredictionCard,
-} from "@/lib/data/home";
+import { TREND_DATES, fmt } from "@/lib/data/home";
+import { surveyToCardData, type Survey, type CardData } from "@/lib/types/survey";
+import { floatingPnl } from "@/lib/types/bet";
 
 const NAV_ITEMS = [
   { label: "公共服务",   slug: "public-services" },
@@ -25,78 +25,108 @@ const NAV_ITEMS = [
   { label: "个人/企业",  slug: "personal-enterprise" },
 ];
 
-// 确定性哈希（SSR/CSR 一致）
+// 确定性哈希（SSR/CSR 一致）—— 仅用于趋势图模拟
 const hash = (n: number, mod: number) => ((n * 2654435761) >>> 0) % mod;
 
-// 关注的调研子集（取前 14 张，确定性）
-const FOLLOWED: PredictionCard[] = STABLE_CARDS.slice(0, 14);
-
-// 进行中 / 已结算 下注子集（沿用全站 id 奇偶约定）
-const ACTIVE_CARDS  = STABLE_CARDS.filter((c) => c.id % 2 !== 0).slice(0, 18);
-const SETTLED_CARDS = STABLE_CARDS.filter((c) => c.id % 2 === 0).slice(0, 18);
-
-// 是否有调研组合（没有则不显示调研详情）
-const HAS_PORTFOLIO = ACTIVE_CARDS.length + SETTLED_CARDS.length > 0;
-// 默认展示第一个调研组合的调研
-const FIRST_PORTFOLIO_ID = (ACTIVE_CARDS[0] ?? SETTLED_CARDS[0] ?? FOLLOWED[0]).id;
-
-// 下注行数据（确定性派生）
-interface BetRow {
-  side: "yes" | "no";
-  stake: number;   // 下注积分
-  odds: number;    // 入场赔率
-  curPct: number;  // 当前该方向胜率
-  won: boolean;    // 已结算是否赢
-  pnl: number;     // 盈亏
-}
-function buildBet(card: PredictionCard, status: "active" | "settled"): BetRow {
-  const side: "yes" | "no" = hash(card.id * 3, 2) === 0 ? "yes" : "no";
-  const odds = parseFloat(side === "yes" ? card.yesOdds : card.noOdds);
-  const stake = (hash(card.id * 7, 18) + 2) * 100; // 200 ~ 1900
-  const curPct = side === "yes" ? card.yesPct : card.noPct;
-  if (status === "active") {
-    const entryPct = 100 / odds;
-    const pnl = Math.round((stake * (curPct - entryPct)) / entryPct);
-    return { side, stake, odds, curPct, won: false, pnl };
-  }
-  const won = hash(card.id * 5, 2) === 0;
-  const pnl = won ? Math.round(stake * (odds - 1) * 0.97) : -stake;
-  return { side, stake, odds, curPct, won, pnl };
-}
-
 export function PortfolioPage() {
-  const { user, portfolio, points } = useAuth();
+  const { user, portfolio, points, bets, betFor, placeBet } = useAuth();
   const { lang } = useLanguage();
   const router = useRouter();
 
-  const titles = TITLES_I18N[lang as keyof typeof TITLES_I18N] || TITLES_I18N["zh-CN"];
-  const topics = TOPICS_I18N[lang as keyof typeof TOPICS_I18N] || TOPICS_I18N["zh-CN"];
+  const lng = lang as "zh-CN" | "zh-TW" | "en";
 
-  const [selectedId, setSelectedId] = useState<number>(FIRST_PORTFOLIO_ID);
-  const [followedIds, setFollowedIds] = useState<number[]>(() => FOLLOWED.map((c) => c.id));
+  const [selectedId, setSelectedId] = useState<number>(-1);
+  const [followIds, setFollowIds] = useState<number[]>([]);
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState | null>(null);
   const [tab, setTab] = useState<"active" | "settled">("active");
   const [betSide, setBetSide] = useState<"yes" | "no">("yes");
   const [betAmount, setBetAmount] = useState("1000");
   const [trendTab, setTrendTab] = useState<"yesno" | "pool" | "parts">("yesno");
+  const [betting, setBetting] = useState(false);
+  const [betMsg, setBetMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const surveyMap = useRef<Map<number, CardData>>(new Map());
+  const [, forceRender] = useState(0);
 
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInst = useRef<Chart | null>(null);
 
-  const selected = STABLE_CARDS.find((c) => c.id === selectedId) || FOLLOWED[0];
-  // 关注列表（可取消关注）
-  const followedCards = followedIds
-    .map((id) => STABLE_CARDS.find((c) => c.id === id))
-    .filter((c): c is PredictionCard => Boolean(c));
-  const unfollow = (id: number) => setFollowedIds((prev) => prev.filter((x) => x !== id));
-  const selTitle = titles[selected.titleIdx] || titles[0];
-  const selTags = selected.tagIndices.map((i) => topics[i] || topics[0]);
-  const yesBets = Math.round((selected.pool * selected.yesPct) / 100);
-  const noBets = Math.round((selected.pool * selected.noPct) / 100);
+  // 从 DB 拉取关注列表
+  useEffect(() => {
+    if (!user?.id) { setFollowIds([]); return; }
+    fetch(`/api/follows?user_id=${encodeURIComponent(user.id)}`)
+      .then((r) => r.json())
+      .then((json: { data?: number[] }) => setFollowIds(json.data ?? []))
+      .catch(() => {});
+  }, [user?.id]);
+
+  // 语言变化时清空已缓存的调研数据，触发按新语言重新拉取
+  useEffect(() => { surveyMap.current.clear(); forceRender((n) => n + 1); }, [lng]);
+
+  // 拉取「关注 ∪ 已下注」涉及的调研详情（左侧列表与下方表格、详情区共用）
+  useEffect(() => {
+    const ids = Array.from(new Set([...followIds, ...bets.map((b) => b.survey_id)]));
+    const missing = ids.filter((id) => !surveyMap.current.has(id));
+    if (missing.length === 0) return;
+    fetch(`/api/surveys/list?ids=${missing.join(",")}`)
+      .then((r) => r.json())
+      .then((res: { data?: Survey[] }) => {
+        (res.data ?? []).forEach((s) => surveyMap.current.set(s.id, surveyToCardData(s, lng)));
+        forceRender((n) => n + 1);
+      })
+      .catch(() => {});
+  }, [followIds, bets, lng]);
+
+  // 默认选中：第一个下注的调研，否则第一个关注的调研
+  useEffect(() => {
+    if (selectedId !== -1) return;
+    const first = bets[0]?.survey_id ?? followIds[0];
+    if (first != null) setSelectedId(first);
+  }, [bets, followIds, selectedId]);
+
+  const selected = surveyMap.current.get(selectedId);
+
+  // 取消关注：从列表移除并同步 DB
+  const unfollow = (id: number) => {
+    setFollowIds((prev) => prev.filter((x) => x !== id));
+    if (user?.id) {
+      fetch(`/api/follows/${id}?user_id=${encodeURIComponent(user.id)}`, { method: "DELETE" }).catch(() => {});
+    }
+  };
+  // 关注：最新关注置于列表最前，并确保左侧列表能取到该调研数据
+  const follow = (id: number) => {
+    if (!user?.id) return;
+    setFollowIds((prev) => [id, ...prev.filter((x) => x !== id)]);
+    fetch(`/api/follows/${id}?user_id=${encodeURIComponent(user.id)}`, { method: "POST" }).catch(() => {});
+    if (!surveyMap.current.has(id)) {
+      fetch(`/api/surveys/list?ids=${id}`)
+        .then((r) => r.json())
+        .then((res: { data?: Survey[] }) => {
+          (res.data ?? []).forEach((s) => surveyMap.current.set(s.id, surveyToCardData(s, lng)));
+          forceRender((n) => n + 1);
+        })
+        .catch(() => {});
+    }
+  };
+  const toggleFollow = (id: number) => (followIds.includes(id) ? unfollow(id) : follow(id));
+  const isFollowed = followIds.includes(selectedId);
+
+  // 选中调研的已有下注 → 方向锁定
+  const selectedBet = betFor(selectedId);
+  const lockedSide = selectedBet?.side ?? null;
+  useEffect(() => { if (lockedSide) setBetSide(lockedSide); }, [lockedSide]);
+
+  // 进行中下注的浮动盈亏合计（用于「调研组合积分」的涨跌提示）
+  const portfolioPnl = bets
+    .filter((b) => b.status === "active")
+    .reduce((sum, b) => {
+      const card = surveyMap.current.get(b.survey_id);
+      const curPct = card ? (b.side === "yes" ? card.yesPct : card.noPct) : 0;
+      return sum + floatingPnl(b, curPct);
+    }, 0);
 
   // 详情走势图（YES/NO 走势 / 积分池增长 / 参与人数）
   useEffect(() => {
-    if (!user || !HAS_PORTFOLIO || !chartRef.current) return;
+    if (!user || !selected || !chartRef.current) return;
     const len = TREND_DATES.length;
     const yesTrend = TREND_DATES.map((_, i) => Math.min(Math.max(selected.yesPct + (hash(selected.id * 100 + i, 17) - 8), 8), 92));
     const poolTrend = TREND_DATES.map((_, i) => Math.round(selected.pool * (0.6 + (i / len) * 0.4)));
@@ -137,22 +167,36 @@ export function PortfolioPage() {
       },
     });
     return () => { chartInst.current?.destroy(); chartInst.current = null; };
-  }, [user, selectedId, lang, trendTab, selected.id, selected.yesPct, selected.pool, selected.parts]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, selectedId, lang, trendTab, selected?.id, selected?.yesPct, selected?.pool, selected?.parts]);
 
-  // 积分汇总
+  // 积分汇总（总积分价值 = 调研组合积分 + 积分余额）
   const total = portfolio + points;
-  const prev = Math.round(portfolio * 0.91);
-  const delta = portfolio - prev;
-  const pct = prev > 0 ? (delta / prev) * 100 : 0;
-  const up = delta >= 0;
+  const up = portfolioPnl >= 0;
+  const pct = portfolio > 0 ? (portfolioPnl / portfolio) * 100 : 0;
 
-  // 表格数据（全部行，超出由纵向滚动条显示）
-  const cards = tab === "active" ? ACTIVE_CARDS : SETTLED_CARDS;
+  // 当前 tab 下的下注行
+  const tableBets = bets.filter((b) => b.status === tab);
 
-  // 下注预计收益
+  // 下注预计净得
+  const yesBets = selected ? Math.round((selected.pool * selected.yesPct) / 100) : 0;
+  const noBets = selected ? Math.round((selected.pool * selected.noPct) / 100) : 0;
   const betNum = parseInt(betAmount.replace(/,/g, "")) || 0;
-  const betOdds = betSide === "yes" ? parseFloat(selected.yesOdds) : parseFloat(selected.noOdds);
+  const betOdds = selected ? parseFloat(betSide === "yes" ? selected.yesOdds : selected.noOdds) : 1;
   const netGain = betNum > 0 ? Math.round((betNum * betOdds - betNum) * 0.97) : 0;
+
+  // 确认下注：余额校验 → 写入后端（余额联动，金额计入调研组合积分）
+  async function confirmBet() {
+    if (betting || !selected) return;
+    if (!user) { setBetMsg({ ok: false, text: "请先登录后再下注" }); return; }
+    if (betNum <= 0) { setBetMsg({ ok: false, text: "请输入下注积分" }); return; }
+    if (betNum > points) { setBetMsg({ ok: false, text: "积分余额不足" }); return; }
+    setBetting(true);
+    setBetMsg(null);
+    const res = await placeBet(selectedId, betSide, betNum, betOdds);
+    setBetting(false);
+    setBetMsg(res.ok ? { ok: true, text: "下注成功，已计入调研组合积分" } : { ok: false, text: res.error });
+  }
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh", fontFamily: "var(--font-fira-sans),sans-serif", color: "var(--text)" }}>
@@ -171,7 +215,6 @@ export function PortfolioPage() {
         <div className="n-inner">
           <button className="nitem hot" onClick={() => router.push("/trending")}>
             热门
-            <svg viewBox="0 0 24 24"><path d="M17.66 11.2c-.23-.3-.51-.56-.77-.82-.67-.6-1.43-1.03-2.07-1.66C13.33 7.26 13 4.85 13.95 3c-.95.23-1.78.75-2.49 1.32-2.59 2.04-3.49 5.56-2.46 8.73.04.14.08.27.08.42 0 .28-.18.52-.46.62-.27.1-.56.01-.74-.21a5.27 5.27 0 01-.88-2.31c-1.12 1.52-1.68 3.48-1.49 5.47.12 1.22.57 2.41 1.29 3.39.81 1.08 1.91 1.87 3.17 2.27 1.41.44 2.97.41 4.37-.06 1.6-.54 2.94-1.69 3.67-3.21.78-1.61.87-3.51.18-5.19-.23-.57-.56-1.09-.97-1.55z" /></svg>
           </button>
           <button className="nitem" onClick={() => router.push("/latest")}>最新</button>
           <div className="n-div" />
@@ -196,7 +239,12 @@ export function PortfolioPage() {
             {/* 左：关注的调研（独占左边、全高、内部滚动；样式同首页侧栏） */}
             <div className="s-panel" style={{ position: "sticky", top: 80, height: "calc(100vh - 100px)", display: "flex", flexDirection: "column" }}>
               <div className="p-head">
-                <span className="p-title">关注的调研</span>
+                <span className="p-title">
+                  关注的调研
+                  <span style={{ marginLeft: 7, background: "rgba(255,255,255,.22)", color: "#fff", fontSize: 11, fontWeight: 700, padding: "1px 7px", borderRadius: 10, verticalAlign: "middle" }}>
+                    {followIds.length}
+                  </span>
+                </span>
                 <button
                   onClick={() => router.push("/follows?from=portfolio")}
                   title="管理关注的调研"
@@ -216,25 +264,35 @@ export function PortfolioPage() {
                 </button>
               </div>
               <div style={{ flex: 1, overflowY: "auto" }}>
-                {followedCards.length === 0 ? (
+                {followIds.length === 0 ? (
                   <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
                     暂无关注的调研
                   </div>
-                ) : followedCards.map((c) => {
-                  const isSel = c.id === selectedId;
-                  const title = titles[c.titleIdx] || titles[0];
+                ) : followIds.map((id) => {
+                  const s = surveyMap.current.get(id);
+                  const isSel = id === selectedId;
+                  const bet = betFor(id);
                   return (
                     <div
-                      key={c.id}
+                      key={id}
                       className="side-survey"
-                      onClick={() => setSelectedId(c.id)}
-                      onContextMenu={(e) => { e.preventDefault(); setCtxMenu(ctxMenuFrom(e, c.id)); }}
+                      onClick={() => setSelectedId(id)}
+                      onContextMenu={(e) => { e.preventDefault(); setCtxMenu(ctxMenuFrom(e, id)); }}
                       style={{ background: isSel ? "rgba(37,99,235,.13)" : undefined, borderBottomColor: "var(--border)" }}
                     >
-                      <div className="side-ttl">{title}</div>
+                      <div className="side-ttl" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{s?.title ?? "加载中…"}</span>
+                        {bet && (
+                          <span style={{
+                            flexShrink: 0, fontSize: 9.5, fontWeight: 700, padding: "1px 5px", borderRadius: 4, letterSpacing: ".3px",
+                            color: bet.side === "yes" ? "#2563EB" : "var(--red)",
+                            background: bet.side === "yes" ? "rgba(37,99,235,.12)" : "rgba(220,38,38,.12)",
+                          }}>已参与</span>
+                        )}
+                      </div>
                       <div className="side-opts">
-                        <div className="s-opt y"><span className="so-lbl">YES</span><span className="so-pct">{c.yesPct}%</span><span className="so-odds">{c.yesOdds}x</span></div>
-                        <div className="s-opt n"><span className="so-lbl">NO</span><span className="so-pct">{c.noPct}%</span><span className="so-odds">{c.noOdds}x</span></div>
+                        <div className="s-opt y"><span className="so-lbl">YES</span><span className="so-pct">{s?.yesPct ?? "--"}%</span><span className="so-odds">{s?.yesOdds ?? "--"}x</span></div>
+                        <div className="s-opt n"><span className="so-lbl">NO</span><span className="so-pct">{s?.noPct ?? "--"}%</span><span className="so-odds">{s?.noOdds ?? "--"}x</span></div>
                       </div>
                     </div>
                   );
@@ -245,11 +303,20 @@ export function PortfolioPage() {
             {/* 右：调研详情 + 我的调研组合（同宽） */}
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
 
-              {/* 调研详情（仅在有调研组合时显示；位于我的调研组合下方） */}
-              {HAS_PORTFOLIO && (
+              {/* 调研详情（仅在选中调研时显示；位于我的调研组合下方） */}
+              {selected && (
                 <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "16px 18px", order: 2 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                    <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--blue-d)", margin: 0, lineHeight: 1.35 }}>{selTitle}</h2>
+                    <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--blue-d)", margin: 0, lineHeight: 1.35 }}>
+                      {selected.title}
+                      {selectedBet && (
+                        <span style={{
+                          marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, letterSpacing: ".3px", verticalAlign: "middle",
+                          color: selectedBet.side === "yes" ? "#2563EB" : "var(--red)",
+                          background: selectedBet.side === "yes" ? "rgba(37,99,235,.1)" : "rgba(220,38,38,.1)",
+                        }}>已参与 · {selectedBet.side === "yes" ? "YES" : "NO"}</span>
+                      )}
+                    </h2>
                     <button
                       onClick={() => router.push(`/survey/${selected.id}`)}
                       style={{ flexShrink: 0, marginTop: 2, background: "none", border: "none", cursor: "pointer", color: "var(--blue)", fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", whiteSpace: "nowrap" }}
@@ -278,7 +345,7 @@ export function PortfolioPage() {
 
                   {/* 标签 */}
                   <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 8 }}>
-                    {selTags.map((tg, i) => <span key={i} className="c-tag">{tg}</span>)}
+                    {selected.tags.map((tg, i) => <span key={i} className="c-tag">{tg}</span>)}
                   </div>
 
                   {/* 积分池卡片 + 积分下注（合起来 = 我的调研组合宽度；两区等高） */}
@@ -286,7 +353,27 @@ export function PortfolioPage() {
 
                     {/* 左：积分池区域 */}
                     <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
-                      <div className="sec-title" style={{ marginBottom: 8 }}>积分池</div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        <div className="sec-title" style={{ margin: 0 }}>积分池</div>
+                        <button
+                          onClick={() => toggleFollow(selectedId)}
+                          title={isFollowed ? "取消关注" : "关注此调研"}
+                          style={{
+                            background: isFollowed ? "var(--blue)" : "transparent",
+                            border: `1.5px solid ${isFollowed ? "var(--blue)" : "var(--border)"}`,
+                            borderRadius: 8, padding: "4px 10px", cursor: "pointer",
+                            display: "flex", alignItems: "center", gap: 5,
+                            color: isFollowed ? "#fff" : "var(--text2)",
+                            fontSize: 12, fontWeight: 500, fontFamily: "inherit", transition: ".2s",
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill={isFollowed ? "#fff" : "none"}
+                            stroke={isFollowed ? "#fff" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                          </svg>
+                          {isFollowed ? "已关注" : "关注"}
+                        </button>
+                      </div>
                       <div style={{ fontFamily: "var(--font-fira-code),monospace", fontSize: 30, fontWeight: 700, color: "var(--blue-d)", lineHeight: 1, marginBottom: 8 }}>
                         {fmt(selected.pool)}<span style={{ fontSize: 13, fontWeight: 500, color: "var(--muted)", marginLeft: 6 }}>积分</span>
                       </div>
@@ -322,7 +409,7 @@ export function PortfolioPage() {
                           }}>{label}</button>
                         ))}
                       </div>
-                      {/* 图表（高度较前再缩减约 15%） */}
+                      {/* 图表 */}
                       <div style={{ position: "relative", height: 123, marginTop: 10 }}>
                         {trendTab === "yesno" && (
                           <div style={{ position: "absolute", top: 0, right: 0, zIndex: 2, fontSize: 11, fontFamily: "var(--font-fira-code),monospace", textAlign: "right", lineHeight: 1.6, background: "rgba(255,255,255,.85)", padding: "2px 6px", borderRadius: 6 }}>
@@ -337,19 +424,30 @@ export function PortfolioPage() {
                     {/* 右：积分下注（box 内置顶对齐） */}
                     <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px" }}>
                       <div className="sec-title" style={{ marginBottom: 12 }}>积分下注</div>
-                      {/* 是/否 */}
+                      {/* 是/否（已下注则另一方向变淡不可选） */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-                        {(["yes", "no"] as const).map((side) => (
-                          <button key={side} onClick={() => setBetSide(side)} style={{
-                            padding: "8px 8px", borderRadius: 8, cursor: "pointer", fontFamily: "inherit", transition: ".15s",
-                            border: betSide === side ? `2px solid ${side === "yes" ? "#2563EB" : "#DC2626"}` : "2px solid var(--border)",
-                            background: "#fff",
-                          }}>
+                        {(["yes", "no"] as const).map((side) => {
+                          const disabled = lockedSide !== null && lockedSide !== side;
+                          return (
+                          <button key={side} onClick={() => !disabled && setBetSide(side)} disabled={disabled}
+                            title={disabled ? "该调研已下注此前方向，无法切换" : undefined}
+                            style={{
+                              padding: "8px 8px", borderRadius: 8, cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit", transition: ".15s",
+                              opacity: disabled ? 0.4 : 1,
+                              border: betSide === side ? `2px solid ${side === "yes" ? "#2563EB" : "#DC2626"}` : "2px solid var(--border)",
+                              background: "#fff",
+                            }}>
                             <div style={{ fontSize: 15, fontWeight: 700, color: side === "yes" ? "#2563EB" : "#DC2626", lineHeight: 1, marginBottom: 3 }}>{side === "yes" ? "是" : "否"}</div>
                             <div style={{ fontFamily: "var(--font-fira-code),monospace", fontSize: 13, fontWeight: 700, color: side === "yes" ? "#2563EB" : "#DC2626" }}>{side === "yes" ? selected.yesOdds : selected.noOdds}x</div>
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
+                      {lockedSide && (
+                        <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: -4, marginBottom: 10, lineHeight: 1.5 }}>
+                          已下注 {lockedSide === "yes" ? "YES" : "NO"} 方向，只能继续加注此方向。
+                        </div>
+                      )}
                       {/* 积分 + 余额 */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                         <span style={{ fontSize: 12, color: "var(--text2)", fontWeight: 600 }}>积分</span>
@@ -363,9 +461,10 @@ export function PortfolioPage() {
                       {/* 快捷金额 */}
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 5, marginBottom: 12 }}>
                         {["10", "50", "100", "500", "1000", "MAX"].map((v) => {
-                          const on = betAmount === v || (v === "MAX" && betAmount === "99999");
+                          const val = v === "MAX" ? String(points) : v;
+                          const on = betAmount === val;
                           return (
-                            <button key={v} onClick={() => setBetAmount(v === "MAX" ? "99999" : v)} style={{
+                            <button key={v} onClick={() => setBetAmount(val)} style={{
                               padding: "5px 0", borderRadius: 5, cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
                               border: "1px solid var(--border)", background: on ? "var(--blue)" : "transparent", color: on ? "#fff" : "var(--text2)", transition: ".15s",
                             }}>{v === "1000" ? "1K" : v}</button>
@@ -378,9 +477,20 @@ export function PortfolioPage() {
                         <span style={{ fontFamily: "var(--font-fira-code),monospace", fontSize: 14, fontWeight: 700, color: "var(--green)" }}>+{fmt(netGain)} 积分</span>
                       </div>
                       {/* 确认 */}
-                      <button style={{ width: "100%", padding: "11px 0", background: "var(--green)", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: ".3px" }}>
-                        确认下注 · {betNum >= 1000 ? Math.floor(betNum / 1000) + "K" : betNum} 积分
+                      <button
+                        onClick={confirmBet}
+                        disabled={betting || betNum <= 0}
+                        style={{
+                          width: "100%", padding: "11px 0", background: "var(--green)", border: "none", borderRadius: 8, color: "#fff", fontSize: 14, fontWeight: 700,
+                          cursor: betting || betNum <= 0 ? "default" : "pointer", fontFamily: "inherit", letterSpacing: ".3px", opacity: betting || betNum <= 0 ? 0.6 : 1,
+                        }}>
+                        {betting ? "下注中…" : `${selectedBet ? "加注" : "确认下注"} · ${betNum >= 1000 ? Math.floor(betNum / 1000) + "K" : betNum} 积分`}
                       </button>
+                      {betMsg && (
+                        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, textAlign: "center", color: betMsg.ok ? "var(--green)" : "var(--red)" }}>
+                          {betMsg.text}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -397,9 +507,11 @@ export function PortfolioPage() {
                       <span style={{ width: 1, height: 16, background: "var(--border)" }} />
                       <span>
                         调研组合积分 <b style={{ fontFamily: "var(--font-fira-code),monospace", color: "var(--blue-d)", fontSize: 14 }}>{fmt(portfolio)}</b>
-                        <span style={{ marginLeft: 6, fontFamily: "var(--font-fira-code),monospace", fontWeight: 600, color: up ? "var(--green)" : "var(--red)" }}>
-                          {up ? "▲" : "▼"}{up ? "+" : ""}{fmt(delta)} {up ? "+" : "-"}{Math.abs(pct).toFixed(1)}%
-                        </span>
+                        {portfolio > 0 && (
+                          <span style={{ marginLeft: 6, fontFamily: "var(--font-fira-code),monospace", fontWeight: 600, color: up ? "var(--green)" : "var(--red)" }}>
+                            {up ? "▲" : "▼"}{up ? "+" : ""}{fmt(portfolioPnl)} {up ? "+" : "-"}{Math.abs(pct).toFixed(1)}%
+                          </span>
+                        )}
                       </span>
                       <span style={{ width: 1, height: 16, background: "var(--border)" }} />
                       <span>积分余额 <b style={{ fontFamily: "var(--font-fira-code),monospace", color: "var(--amber)", fontSize: 14 }}>{fmt(points)}</b></span>
@@ -437,15 +549,25 @@ export function PortfolioPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {cards.map((c) => {
-                        const bet = buildBet(c, tab);
-                        const title = titles[c.titleIdx] || titles[0];
-                        const pnlPos = bet.pnl >= 0;
-                        const isSel = c.id === selectedId;
+                      {tableBets.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ padding: "36px 16px", textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
+                            {tab === "active" ? "暂无进行中的下注，去调研详情下注吧" : "暂无已结算的下注"}
+                          </td>
+                        </tr>
+                      ) : tableBets.map((bet) => {
+                        const card = surveyMap.current.get(bet.survey_id);
+                        const title = card?.title ?? "加载中…";
+                        const curPct = card ? (bet.side === "yes" ? card.yesPct : card.noPct) : 0;
+                        const pnl = tab === "active"
+                          ? floatingPnl(bet, curPct)
+                          : (bet.won ? Math.round(bet.amount * (bet.odds - 1) * 0.97) : -bet.amount);
+                        const pnlPos = pnl >= 0;
+                        const isSel = bet.survey_id === selectedId;
                         return (
                           <tr
-                            key={c.id}
-                            onClick={() => setSelectedId(c.id)}
+                            key={bet.survey_id}
+                            onClick={() => setSelectedId(bet.survey_id)}
                             style={{
                               borderBottom: "1px solid var(--border)", cursor: "pointer", transition: ".15s",
                               background: isSel ? "rgba(37,99,235,.13)" : "transparent",
@@ -472,11 +594,11 @@ export function PortfolioPage() {
                                 {bet.side === "yes" ? "YES" : "NO"}
                               </span>
                             </td>
-                            <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-fira-code),monospace", color: "var(--text2)" }}>{fmt(bet.stake)}</td>
+                            <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-fira-code),monospace", color: "var(--text2)" }}>{fmt(bet.amount)}</td>
                             <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-fira-code),monospace", color: "var(--text2)" }}>×{bet.odds.toFixed(2)}</td>
                             <td style={{ ...tdStyle, textAlign: "right" }}>
                               {tab === "active" ? (
-                                <span style={{ fontFamily: "var(--font-fira-code),monospace", color: "var(--text2)" }}>{bet.curPct}%</span>
+                                <span style={{ fontFamily: "var(--font-fira-code),monospace", color: "var(--text2)" }}>{curPct}%</span>
                               ) : (
                                 <span style={{
                                   fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
@@ -487,8 +609,8 @@ export function PortfolioPage() {
                                 </span>
                               )}
                             </td>
-                            <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-fira-code),monospace", fontWeight: 700, color: bet.pnl === 0 ? "var(--text2)" : pnlPos ? "var(--green)" : "var(--red)" }}>
-                              {bet.pnl > 0 ? "+" : ""}{fmt(bet.pnl)}
+                            <td style={{ ...tdStyle, textAlign: "right", fontFamily: "var(--font-fira-code),monospace", fontWeight: 700, color: pnl === 0 ? "var(--text2)" : pnlPos ? "var(--green)" : "var(--red)" }}>
+                              {pnl > 0 ? "+" : ""}{fmt(pnl)}
                             </td>
                           </tr>
                         );

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { TrendingPage } from "@/components/features/trending/trending-page";
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function TrendingRoutePage() {
-  return <TrendingPage />;
+  return (
+    <Suspense>
+      <TrendingPage />
+    </Suspense>
+  );
 }

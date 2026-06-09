@@ -1,15 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/components/providers/language-provider";
 import { HeaderActions } from "@/components/layouts/header-actions";
 import { Logo } from "@/components/layouts/site-logo";
 import { HeaderSearch } from "@/components/layouts/header-search";
 import { TITLES_I18N, TOPICS_I18N } from "@/lib/i18n/dict";
+import { fuzzyScore } from "@/lib/search";
 import {
   STABLE_CARDS, AV_COLORS, fmt,
-  SORT_OPTIONS, type SortKey, type PredictionCard,
+  SORT_OPTIONS, type SortKey,
 } from "@/lib/data/home";
 
 const STATUS_OPTS = [
@@ -49,22 +50,32 @@ export function SearchResults({ query }: { query: string }) {
   const [sort,   setSort]   = useState<SortKey>("volume24h");
   const [status, setStatus] = useState<StatusKey>("active");
 
-  // 关键词过滤后的基础列表（用于统计各话题数量）
+  // 关键词模糊过滤后的基础列表（按相关度排序，用于统计各话题数量）
   const baseList = useMemo(() => {
     const q = query.trim();
     if (!q) return [...STABLE_CARDS];
-    return STABLE_CARDS.filter((c) => {
-      const title = titles[c.titleIdx] || "";
-      const tagNames = c.tagIndices.map((i) => topics[i] || "");
-      return title.includes(q) || tagNames.some((tg) => tg.includes(q));
-    });
+    return STABLE_CARDS
+      .map((c) => {
+        const title = titles[c.titleIdx] || "";
+        const tagNames = c.tagIndices.map((i) => topics[i] || "");
+        return { c, score: fuzzyScore(q, title + " " + tagNames.join(" ")) };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.c);
   }, [query, titles, topics]);
 
-  // 各话题在基础列表中的数量
-  const topicCounts = useMemo(
-    () => topics.map((_, i) => baseList.filter((c) => c.tagIndices.includes(i)).length),
+  // 标签按搜索结果汇总：只保留结果中出现的话题，按命中数降序
+  const presentTopics = useMemo(
+    () => topics
+      .map((name, i) => ({ name, i, count: baseList.filter((c) => c.tagIndices.includes(i)).length }))
+      .filter((t) => t.count > 0)
+      .sort((a, b) => b.count - a.count),
     [baseList, topics]
   );
+
+  // 切换搜索词时重置话题筛选（避免选中的话题在新结果中不存在）
+  useEffect(() => { setActiveTopic(-1); }, [query]);
 
   const results = useMemo(() => {
     let list = [...baseList];
@@ -94,7 +105,6 @@ export function SearchResults({ query }: { query: string }) {
         <div className="n-inner">
           <button className="nitem hot" onClick={() => router.push("/trending")}>
             热门
-            <svg viewBox="0 0 24 24"><path d="M17.66 11.2c-.23-.3-.51-.56-.77-.82-.67-.6-1.43-1.03-2.07-1.66C13.33 7.26 13 4.85 13.95 3c-.95.23-1.78.75-2.49 1.32-2.59 2.04-3.49 5.56-2.46 8.73.04.14.08.27.08.42 0 .28-.18.52-.46.62-.27.1-.56.01-.74-.21a5.27 5.27 0 01-.88-2.31c-1.12 1.52-1.68 3.48-1.49 5.47.12 1.22.57 2.41 1.29 3.39.81 1.08 1.91 1.87 3.17 2.27 1.41.44 2.97.41 4.37-.06 1.6-.54 2.94-1.69 3.67-3.21.78-1.61.87-3.51.18-5.19-.23-.57-.56-1.09-.97-1.55z" /></svg>
           </button>
           <button className="nitem" onClick={() => router.push("/latest")}>最新</button>
           <div className="n-div" />
@@ -115,30 +125,32 @@ export function SearchResults({ query }: { query: string }) {
               </h1>
             </div>
 
-            {/* 话题分类 chip 行（含数量） */}
-            <div className="filter-row" style={{ marginBottom: 4 }}>
-              <button
-                className={"f-tag" + (activeTopic === -1 ? " active" : "")}
-                onClick={() => setActiveTopic(-1)}
-              >
-                全部
-                <span style={{ marginLeft: 5, fontSize: 11, fontFamily: "var(--font-fira-code),monospace", opacity: activeTopic === -1 ? 1 : 0.6 }}>
-                  {baseList.length}
-                </span>
-              </button>
-              {topics.map((tp, i) => (
+            {/* 话题分类 chip 行（仅展示搜索结果中出现的话题，按命中数降序） */}
+            {presentTopics.length > 0 && (
+              <div className="filter-row" style={{ marginBottom: 4 }}>
                 <button
-                  key={i}
-                  className={"f-tag" + (activeTopic === i ? " active" : "")}
-                  onClick={() => setActiveTopic(i)}
+                  className={"f-tag" + (activeTopic === -1 ? " active" : "")}
+                  onClick={() => setActiveTopic(-1)}
                 >
-                  {tp}
-                  <span style={{ marginLeft: 5, fontSize: 11, fontFamily: "var(--font-fira-code),monospace", opacity: activeTopic === i ? 1 : 0.6 }}>
-                    {topicCounts[i]}
+                  全部
+                  <span style={{ marginLeft: 5, fontSize: 11, fontFamily: "var(--font-fira-code),monospace", opacity: activeTopic === -1 ? 1 : 0.6 }}>
+                    {baseList.length}
                   </span>
                 </button>
-              ))}
-            </div>
+                {presentTopics.map((tp) => (
+                  <button
+                    key={tp.i}
+                    className={"f-tag" + (activeTopic === tp.i ? " active" : "")}
+                    onClick={() => setActiveTopic(tp.i)}
+                  >
+                    {tp.name}
+                    <span style={{ marginLeft: 5, fontSize: 11, fontFamily: "var(--font-fira-code),monospace", opacity: activeTopic === tp.i ? 1 : 0.6 }}>
+                      {tp.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div style={{ fontSize: 12, color: "var(--muted)", margin: "12px 2px" }}>
               共 {results.length} 条结果

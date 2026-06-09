@@ -3,10 +3,12 @@
 // 调研详情主体 —— 标题区 + 积分池/趋势图 + 最近下注 + 积分下注
 // 抽离自 survey-detail.tsx，供调研详情页 (/survey/[id]) 与关注的调研页 (/follows) 共用
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Chart from "chart.js/auto";
 import { useLanguage } from "@/components/providers/language-provider";
-import { TITLES_I18N, TOPICS_I18N } from "@/lib/i18n/dict";
-import { TREND_DATES, fmt, dateStr, AV_COLORS, R_NAMES } from "@/lib/data/home";
+import { useAuth } from "@/components/providers/auth-provider";
+import { fmt, AV_COLORS, R_NAMES } from "@/lib/data/home";
+import { surveyToCardData, type Survey, type TrendData } from "@/lib/types/survey";
 
 // 最近下注条目
 interface BetItem {
@@ -17,56 +19,22 @@ interface BetItem {
   minsAgo: number;
 }
 
-// 根据 id 确定性地生成调研数据（seed = id，保证同 id 数据稳定）
 export function seedRnd(seed: number, a: number, b: number) {
   const x = Math.sin(seed + 1) * 10000;
   return a + Math.floor((x - Math.floor(x)) * (b - a + 1));
 }
 
-export function buildSurveyData(id: number, lang: "zh-CN" | "zh-TW" | "en") {
-  const titles = TITLES_I18N[lang] || TITLES_I18N["zh-CN"];
-  const topics = TOPICS_I18N[lang] || TOPICS_I18N["zh-CN"];
-  const titleIdx = seedRnd(id * 7, 0, titles.length - 1);
-  const yesPct = seedRnd(id * 3, 35, 65);
-  const noPct = 100 - yesPct;
-  const pool = seedRnd(id * 11, 50000, 600000);
-  const parts = seedRnd(id * 5, 500, 8000);
-  const yesOdds = (100 / yesPct).toFixed(2);
-  const noOdds = (100 / noPct).toFixed(2);
-  const tagIdx = [seedRnd(id * 2, 0, topics.length - 1), seedRnd(id * 4, 0, topics.length - 1)];
-  const tags = [...new Set(tagIdx)].slice(0, 2).map((i) => topics[i]);
-  const dl = dateStr(seedRnd(id * 9, 10, 120));
-  const pub = dateStr(-seedRnd(id * 6, 1, 30));
-  // YES 分布：用于 YES/NO 趋势图（确定性生成）
-  const yesTrend = TREND_DATES.map((_, i) => {
-    const base = yesPct + seedRnd(id * 100 + i, -8, 8);
-    return Math.min(Math.max(base, 10), 90);
-  });
-  // 积分池增长趋势（随时间递增）
-  const poolTrend = TREND_DATES.map((_, i) => {
-    return Math.round(pool * (0.6 + (i / TREND_DATES.length) * 0.4));
-  });
-  // 参与人数趋势
-  const partsTrend = TREND_DATES.map((_, i) => {
-    return Math.round(parts * (0.5 + (i / TREND_DATES.length) * 0.5));
-  });
-  return {
-    title: titles[titleIdx],
-    tags,
-    yesPct,
-    noPct,
-    pool,
-    parts,
-    yesOdds,
-    noOdds,
-    dl,
-    pub,
-    yesBets: Math.round(pool * (yesPct / 100)),
-    noBets: Math.round(pool * (noPct / 100)),
-    yesTrend,
-    poolTrend,
-    partsTrend,
-  };
+function parseTrend(td: TrendData | null, yesPct: number, pool: number, parts: number) {
+  if (td && td.yes_pcts.length > 0) {
+    return { dates: td.dates, yesTrend: td.yes_pcts, poolTrend: td.pools, partsTrend: td.parts_counts };
+  }
+  // fallback: generate client-side if trend_data is missing
+  const N = 12;
+  const dates = Array.from({ length: N }, (_, i) => `pt${i + 1}`);
+  const yesTrend = dates.map((_, i) => Math.min(Math.max(yesPct + seedRnd(i * 17, -8, 8), 10), 90));
+  const poolTrend = dates.map((_, i) => Math.round(pool * (0.6 + (i / (N - 1)) * 0.4)));
+  const partsTrend = dates.map((_, i) => Math.round(parts * (0.5 + (i / (N - 1)) * 0.5)));
+  return { dates, yesTrend, poolTrend, partsTrend };
 }
 
 // 生成最近下注条目（确定性）
@@ -83,35 +51,118 @@ function buildRecentBets(id: number): BetItem[] {
 // 三个趋势视图标签
 type TrendTab = "yesno" | "pool" | "parts";
 
-// 右侧积分下注栏宽度（在不同页面可调）
-export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betColWidth?: number }) {
+export function SurveyDetailBody({ id, betColWidth = 310, onUnfollow }: { id: number; betColWidth?: number; onUnfollow?: (id: number) => void }) {
   const { lang } = useLanguage();
+  const router = useRouter();
+  const { user, points, placeBet, betFor } = useAuth();
 
-  const survey = buildSurveyData(id, lang as "zh-CN" | "zh-TW" | "en");
+  const [dbSurvey, setDbSurvey] = useState<Survey | null>(null);
+  const [loadingSurvey, setLoadingSurvey] = useState(true);
+  const [followed, setFollowed] = useState(false);
+  const [followLoading, setFollowLoading] = useState(false);
+
+  useEffect(() => {
+    setLoadingSurvey(true);
+    fetch(`/api/surveys/${id}`)
+      .then((r) => r.json())
+      .then((json: { data?: Survey }) => { if (json.data) setDbSurvey(json.data); })
+      .catch(() => {})
+      .finally(() => setLoadingSurvey(false));
+  }, [id]);
+
+  // 检查当前用户是否已关注此调研
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`/api/follows?user_id=${encodeURIComponent(user.id)}`)
+      .then((r) => r.json())
+      .then((json: { data?: number[] }) => {
+        setFollowed((json.data ?? []).includes(id));
+      })
+      .catch(() => {});
+  }, [id, user?.id]);
+
+  async function toggleFollow() {
+    if (!user?.id || followLoading) return;
+    setFollowLoading(true);
+    const method = followed ? "DELETE" : "POST";
+    try {
+      await fetch(`/api/follows/${id}?user_id=${encodeURIComponent(user.id)}`, { method });
+      setFollowed((v) => !v);
+      if (method === "DELETE") onUnfollow?.(id);
+    } catch {
+      // ignore
+    } finally {
+      setFollowLoading(false);
+    }
+  }
+
+  const card = dbSurvey
+    ? surveyToCardData(dbSurvey, lang as "zh-CN" | "zh-TW" | "en")
+    : null;
+
+  const survey = card
+    ? {
+        title:    card.title,
+        tags:     card.tags,
+        yesPct:   card.yesPct,
+        noPct:    card.noPct,
+        pool:     card.pool,
+        parts:    card.parts,
+        yesOdds:  card.yesOdds,
+        noOdds:   card.noOdds,
+        dl:       card.dl,
+        pub:      card.pub,
+        yesBets:  Math.round(card.pool * (card.yesPct / 100)),
+        noBets:   Math.round(card.pool * (card.noPct / 100)),
+        ...parseTrend(dbSurvey?.trend_data ?? null, card.yesPct, card.pool, card.parts),
+      }
+    : null;
+
   const recentBets = buildRecentBets(id);
 
-  // 积分下注状态
   const [selectedSide, setSelectedSide] = useState<"yes" | "no">("yes");
   const [betAmount, setBetAmount] = useState<string>("1000");
   const [activeTrendTab, setActiveTrendTab] = useState<TrendTab>("yesno");
+  const [betting, setBetting] = useState(false);
+  const [betMsg, setBetMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // 已下注则锁定方向：只能继续此前方向，另一方向变淡不可选
+  const existingBet = betFor(id);
+  const lockedSide = existingBet?.side ?? null;
+  useEffect(() => {
+    if (lockedSide) setSelectedSide(lockedSide);
+  }, [lockedSide]);
 
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstance = useRef<Chart | null>(null);
 
-  // 净得：根据选择方向和赔率计算
   const betNum = parseInt(betAmount.replace(/,/g, "")) || 0;
-  const odds = selectedSide === "yes" ? parseFloat(survey.yesOdds) : parseFloat(survey.noOdds);
+  const odds = survey
+    ? (selectedSide === "yes" ? parseFloat(survey.yesOdds) : parseFloat(survey.noOdds))
+    : 1;
   const netGain = betNum > 0 ? ((betNum * odds - betNum) * 0.97).toFixed(0) : "0";
 
-  // 趋势图数据切换
-  function getTrendDatasets(tab: TrendTab) {
+  // 确认下注：余额校验 → 写入后端（余额联动）
+  async function confirmBet() {
+    if (betting || !survey) return;
+    if (!user) { setBetMsg({ ok: false, text: "请先登录后再下注" }); return; }
+    if (betNum <= 0) { setBetMsg({ ok: false, text: "请输入下注积分" }); return; }
+    if (betNum > points) { setBetMsg({ ok: false, text: "积分余额不足" }); return; }
+    setBetting(true);
+    setBetMsg(null);
+    const res = await placeBet(id, selectedSide, betNum, odds);
+    setBetting(false);
+    setBetMsg(res.ok ? { ok: true, text: "下注成功，已计入调研组合积分" } : { ok: false, text: res.error });
+  }
+
+  function getTrendDatasets(tab: TrendTab, s: NonNullable<typeof survey>) {
     if (tab === "yesno") {
       return {
-        labels: TREND_DATES,
+        labels: s.dates,
         datasets: [
           {
             label: "YES",
-            data: survey.yesTrend,
+            data: s.yesTrend,
             borderColor: "#2563EB",
             backgroundColor: "rgba(37,99,235,.08)",
             borderWidth: 2,
@@ -121,7 +172,7 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
           },
           {
             label: "NO",
-            data: survey.yesTrend.map((v) => 100 - v),
+            data: s.yesTrend.map((v) => 100 - v),
             borderColor: "#DC2626",
             backgroundColor: "transparent",
             borderWidth: 2,
@@ -134,11 +185,11 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
     }
     if (tab === "pool") {
       return {
-        labels: TREND_DATES,
+        labels: s.dates,
         datasets: [
           {
             label: "积分池",
-            data: survey.poolTrend,
+            data: s.poolTrend,
             borderColor: "#2563EB",
             backgroundColor: "rgba(37,99,235,.08)",
             borderWidth: 2,
@@ -151,11 +202,11 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
     }
     // parts
     return {
-      labels: TREND_DATES,
+      labels: s.dates,
       datasets: [
         {
           label: "参与人数",
-          data: survey.partsTrend,
+          data: s.partsTrend,
           borderColor: "#16A34A",
           backgroundColor: "rgba(22,163,74,.08)",
           borderWidth: 2,
@@ -167,14 +218,13 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
     };
   }
 
-  // 挂载/更新趋势图
   useEffect(() => {
-    if (!chartRef.current) return;
+    if (!chartRef.current || !survey) return;
     if (chartInstance.current) chartInstance.current.destroy();
     const isYesNo = activeTrendTab === "yesno";
     chartInstance.current = new Chart(chartRef.current.getContext("2d")!, {
       type: "line",
-      data: getTrendDatasets(activeTrendTab),
+      data: getTrendDatasets(activeTrendTab, survey),
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -213,19 +263,45 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
     });
     return () => { chartInstance.current?.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTrendTab, id, lang]);
+  }, [activeTrendTab, id, lang, dbSurvey]);
+
+  if (loadingSurvey) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", padding: "60px 0" }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: "50%",
+          border: "3px solid rgba(37,99,235,.2)",
+          borderTopColor: "var(--blue)",
+          animation: "spin 0.8s linear infinite",
+        }} />
+      </div>
+    );
+  }
+
+  if (!survey) {
+    return <div style={{ padding: "60px 0", textAlign: "center", color: "var(--muted)" }}>调研不存在</div>;
+  }
 
   return (
     <>
       {/* 标题区 */}
       <div style={{ marginBottom: 18 }}>
-        {/* 题目 */}
-        <h1 style={{
-          fontSize: 26, fontWeight: 700, color: "var(--blue-d)",
-          lineHeight: 1.3, margin: "0 0 10px 0",
-        }}>
-          {survey.title}
-        </h1>
+        {/* 题目 + 已下注标记 */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, margin: "0 0 10px 0" }}>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--blue-d)", lineHeight: 1.3, margin: 0 }}>
+            {survey.title}
+          </h1>
+          {existingBet && (
+            <span style={{
+              flexShrink: 0, marginTop: 4, fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 6,
+              letterSpacing: ".3px", whiteSpace: "nowrap",
+              color: existingBet.side === "yes" ? "#2563EB" : "var(--red)",
+              background: existingBet.side === "yes" ? "rgba(37,99,235,.1)" : "rgba(220,38,38,.1)",
+            }}>
+              已参与 · {existingBet.side === "yes" ? "YES" : "NO"}
+            </span>
+          )}
+        </div>
 
         {/* 元信息行：积分池 / 参与者 / 发布 / 截止 */}
         <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
@@ -260,10 +336,17 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
           </span>
         </div>
 
-        {/* 话题标签（首页 c-tag 风格） */}
-        <div style={{ display: "flex", gap: 6 }}>
+        {/* 话题标签 — 可点击，跳转至热门页按标签过滤 */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {survey.tags.map((tag, i) => (
-            <span key={i} className="c-tag">{tag}</span>
+            <span
+              key={i}
+              className="c-tag"
+              style={{ cursor: "pointer" }}
+              onClick={() => router.push(`/trending?tag=${encodeURIComponent(tag)}`)}
+            >
+              {tag}
+            </span>
           ))}
         </div>
       </div>
@@ -276,8 +359,33 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
 
           {/* 积分池卡片 */}
           <div className="carousel" style={{ padding: "20px 24px 18px" }}>
-            {/* 积分池标题（首页 sec-title 风格） */}
-            <div className="sec-title" style={{ marginBottom: 10 }}>积分池</div>
+            {/* 积分池标题 + 关注按钮 */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div className="sec-title" style={{ margin: 0 }}>积分池</div>
+              {user && (
+                <button
+                  onClick={toggleFollow}
+                  disabled={followLoading}
+                  title={followed ? "取消关注" : "关注此调研"}
+                  style={{
+                    background: followed ? "var(--blue)" : "transparent",
+                    border: `1.5px solid ${followed ? "var(--blue)" : "var(--border)"}`,
+                    borderRadius: 8, padding: "5px 10px",
+                    cursor: followLoading ? "default" : "pointer",
+                    display: "flex", alignItems: "center", gap: 5,
+                    color: followed ? "#fff" : "var(--text2)",
+                    fontSize: 12.5, fontWeight: 500, fontFamily: "inherit",
+                    transition: ".2s", opacity: followLoading ? 0.6 : 1,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill={followed ? "#fff" : "none"}
+                    stroke={followed ? "#fff" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                  </svg>
+                  {followed ? "已关注" : "关注"}
+                </button>
+              )}
+            </div>
 
             {/* 大数字 */}
             <div style={{
@@ -419,15 +527,19 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
             {/* 积分下注标题（sec-title 风格） */}
             <div className="sec-title" style={{ marginBottom: 14 }}>积分下注</div>
 
-            {/* 是/否选择按钮 */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-              {(["yes", "no"] as const).map((side) => (
+            {/* 是/否选择按钮（已下注则另一方向变淡不可选） */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: lockedSide ? 8 : 16 }}>
+              {(["yes", "no"] as const).map((side) => {
+                const disabled = lockedSide !== null && lockedSide !== side;
+                return (
                 <button
                   key={side}
-                  onClick={() => setSelectedSide(side)}
+                  onClick={() => !disabled && setSelectedSide(side)}
+                  disabled={disabled}
+                  title={disabled ? "该调研已下注此前方向，无法切换" : undefined}
                   style={{
-                    padding: "10px 8px", borderRadius: 8, cursor: "pointer",
-                    fontFamily: "inherit", transition: ".2s",
+                    padding: "10px 8px", borderRadius: 8, cursor: disabled ? "not-allowed" : "pointer",
+                    fontFamily: "inherit", transition: ".2s", opacity: disabled ? 0.4 : 1,
                     border: selectedSide === side
                       ? `2px solid ${side === "yes" ? "#2563EB" : "#DC2626"}`
                       : "2px solid var(--border)",
@@ -451,8 +563,14 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
                     {side === "yes" ? survey.yesOdds : survey.noOdds}x
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
+            {lockedSide && (
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 12, lineHeight: 1.5 }}>
+                已下注 {lockedSide === "yes" ? "YES" : "NO"} 方向，只能继续加注此方向。
+              </div>
+            )}
 
             {/* 分隔线 + 积分余额标签 */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -462,7 +580,7 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
                 background: "rgba(30,64,175,.07)", padding: "2px 8px",
                 borderRadius: 5,
               }}>
-                余额：0 积分
+                余额：{fmt(points)} 积分
               </span>
             </div>
 
@@ -490,24 +608,26 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
 
             {/* 快捷金额按钮 */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 5, marginBottom: 14 }}>
-              {["10", "50", "100", "500", "1000", "MAX"].map((v) => (
+              {["10", "50", "100", "500", "1000", "MAX"].map((v) => {
+                const val = v === "MAX" ? String(points) : v;
+                const on = betAmount === val;
+                return (
                 <button
                   key={v}
-                  onClick={() => setBetAmount(v === "MAX" ? "99999" : v)}
+                  onClick={() => setBetAmount(val)}
                   style={{
                     padding: "5px 0", borderRadius: 5, cursor: "pointer",
                     fontSize: 12, fontWeight: 600, fontFamily: "inherit",
                     border: "1px solid var(--border)",
-                    background: betAmount === v || (v === "MAX" && betAmount === "99999")
-                      ? "var(--blue)" : "transparent",
-                    color: betAmount === v || (v === "MAX" && betAmount === "99999")
-                      ? "#fff" : "var(--text2)",
+                    background: on ? "var(--blue)" : "transparent",
+                    color: on ? "#fff" : "var(--text2)",
                     transition: ".15s",
                   }}
                 >
                   {v === "1000" ? "1K" : v}
                 </button>
-              ))}
+                );
+              })}
             </div>
 
             {/* 净得 */}
@@ -525,18 +645,31 @@ export function SurveyDetailBody({ id, betColWidth = 310 }: { id: number; betCol
               </span>
             </div>
 
-            {/* 确认下注按钮 */}
-            <button style={{
-              width: "100%", padding: "12px 0",
-              background: "var(--green)", border: "none", borderRadius: 8,
-              color: "#fff", fontSize: 14, fontWeight: 700,
-              cursor: "pointer", fontFamily: "inherit",
-              transition: ".2s", letterSpacing: ".3px",
-            }}>
-              确认下注 · {parseInt(betAmount) >= 1000
-                ? Math.floor(parseInt(betAmount) / 1000) + "K"
-                : betAmount} 积分
+            {/* 确认下注按钮（与积分余额联动） */}
+            <button
+              onClick={confirmBet}
+              disabled={betting || betNum <= 0}
+              style={{
+                width: "100%", padding: "12px 0",
+                background: "var(--green)", border: "none", borderRadius: 8,
+                color: "#fff", fontSize: 14, fontWeight: 700,
+                cursor: betting || betNum <= 0 ? "default" : "pointer", fontFamily: "inherit",
+                transition: ".2s", letterSpacing: ".3px",
+                opacity: betting || betNum <= 0 ? 0.6 : 1,
+              }}
+            >
+              {betting ? "下注中…" : `${existingBet ? "加注" : "确认下注"} · ${betNum >= 1000 ? Math.floor(betNum / 1000) + "K" : betNum} 积分`}
             </button>
+
+            {/* 下注结果提示 */}
+            {betMsg && (
+              <div style={{
+                marginTop: 10, fontSize: 12, fontWeight: 600, textAlign: "center",
+                color: betMsg.ok ? "var(--green)" : "var(--red)",
+              }}>
+                {betMsg.text}
+              </div>
+            )}
 
             {/* 免责声明（去掉"结算上链透明可查"） */}
             <p style={{

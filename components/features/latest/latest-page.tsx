@@ -175,7 +175,7 @@ export function LatestPage() {
 
   // 默认：排序=最新发布、时段=每天、状态=进行中
   const [sort, setSort] = useState<SortKey>("latest");
-  const [period, setPeriod] = useState<PeriodKey>("week");
+  const [period, setPeriod] = useState<PeriodKey>("month");
   const [status, setStatus] = useState<StatusKey>("active");
   const [activeTopic, setActiveTopic] = useState("all");
   const [displayCount, setDisplayCount] = useState(PER_PAGE);
@@ -261,7 +261,6 @@ export function LatestPage() {
         <div className="n-inner">
           <button className="nitem hot" onClick={() => router.push("/trending")}>
             热门
-            <svg viewBox="0 0 24 24"><path d="M17.66 11.2c-.23-.3-.51-.56-.77-.82-.67-.6-1.43-1.03-2.07-1.66C13.33 7.26 13 4.85 13.95 3c-.95.23-1.78.75-2.49 1.32-2.59 2.04-3.49 5.56-2.46 8.73.04.14.08.27.08.42 0 .28-.18.52-.46.62-.27.1-.56.01-.74-.21a5.27 5.27 0 01-.88-2.31c-1.12 1.52-1.68 3.48-1.49 5.47.12 1.22.57 2.41 1.29 3.39.81 1.08 1.91 1.87 3.17 2.27 1.41.44 2.97.41 4.37-.06 1.6-.54 2.94-1.69 3.67-3.21.78-1.61.87-3.51.18-5.19-.23-.57-.56-1.09-.97-1.55z"/></svg>
           </button>
           <button className="nitem active" onClick={() => router.push("/latest")}>最新</button>
           <div className="n-div" />

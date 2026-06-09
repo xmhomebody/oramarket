@@ -8,4 +8,5 @@ const baseUrl =
   process.env.NEXT_PUBLIC_APP_URL ??
   (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
 
-export const api = hc<AppType>(baseUrl);
+// 取 .api 节点，使调用路径与路由对应（应用 basePath 为 /api）：api.auth.login.$post(...)
+export const api = hc<AppType>(baseUrl).api;

@@ -9,39 +9,25 @@ import { useLanguage } from "@/components/providers/language-provider";
 import { HeaderActions } from "@/components/layouts/header-actions";
 import { Logo } from "@/components/layouts/site-logo";
 import { HeaderSearch } from "@/components/layouts/header-search";
-import { type Lang, translate, TOPICS_I18N, TITLES_I18N } from "@/lib/i18n/dict";
+import { type Lang, translate } from "@/lib/i18n/dict";
+import type { Survey } from "@/lib/types/survey";
 import {
   AV_COLORS,
   LB,
   REGIONS,
-  LATEST_SURVEYS,
-  HOT_SURVEYS,
   HOT_TOPICS,
-  SLIDE_DATA,
   TRENDS,
   TREND_DATES,
   R_NAMES,
   R_CARDS,
   R_KEYS,
-  CAROUSEL_COMMENTS,
   MQ_DATA,
   STAT_TARGETS,
   FILTER_COUNTS,
-  generateCards,
   fmt,
   rnd,
   pick,
-  type PredictionCard,
 } from "@/lib/data/home";
-
-// 5 张精选轮播的投票静态数据（YES/NO 百分比与赔率），与原站一致
-const SLIDES = [
-  { y: 67, yo: "1.49", n: 33, no: "3.03" },
-  { y: 45, yo: "2.22", n: 55, no: "1.82" },
-  { y: 52, yo: "1.92", n: 48, no: "2.08" },
-  { y: 38, yo: "2.63", n: 62, no: "1.61" },
-  { y: 71, yo: "1.41", n: 29, no: "3.45" },
-];
 
 // 绿色上涨小三角图标（统计卡片复用）
 function UpTriangle() {
@@ -81,13 +67,9 @@ export function OraMarketHome() {
 
     // ── 通用工具 ──
     const t = (key: string) => translate(langRef.current, key);
-    const getTopics = () => TOPICS_I18N[langRef.current] || TOPICS_I18N["zh-CN"];
-    const getTitles = () => TITLES_I18N[langRef.current] || TITLES_I18N["zh-CN"];
-
     const charts: Chart[] = []; // 所有图表实例，便于卸载时销毁
     const trendCharts: Chart[] = []; // 轮播趋势图（需 resize）
     const timers: ReturnType<typeof setInterval>[] = [];
-    const CARDS = generateCards(); // 预测卡片数据（客户端生成，避免水合不一致）
     const PER_PAGE = 40;
     let page = 0;
     let busy = false;
@@ -95,6 +77,7 @@ export function OraMarketHome() {
     let cTimer: ReturnType<typeof setInterval> | undefined;
     let lbPeriod: keyof typeof LB = "day"; // 排行榜周期
     let lbMet: "points" | "accuracy" = "points"; // 排行榜指标
+    let dbSurveys: Survey[] = []; // DB 拉取的真实调研数据
 
     // ── 统计卡片：迷你折线 + 数字滚动 ──
     function mkSparkline(id: string, color: string) {
@@ -134,55 +117,92 @@ export function OraMarketHome() {
     // ── 精选轮播：标题/元信息/标签/评论的多语言填充 ──
     function updateCarouselI18n() {
       const slides = document.querySelectorAll(".c-slide");
-      const ccKey = langRef.current === "en" ? "en" : langRef.current === "zh-TW" ? "tw" : "zh";
-      slides.forEach((slide, i) => {
-        const d = SLIDE_DATA[i];
-        if (!d) return;
-        const title = slide.querySelector(".c-title");
-        if (title) title.textContent = t(d.title);
-        const meta = slide.querySelector(".c-meta");
-        if (meta) {
-          const coinIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.8" style="flex-shrink:0"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>`;
-          const usersIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>`;
-          const clockIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
-          meta.innerHTML = `
-            <span style="display:inline-flex;align-items:center;gap:4px">${coinIcon}<b style="font-family:var(--font-fira-code),monospace;color:var(--blue)">${d.pool}</b><span>${t("carousel_pool")}</span></span>
-            <span style="display:inline-flex;align-items:center;gap:4px">${usersIcon}${d.parts} ${t("carousel_participants")}</span>
-            <span>${t("card_published")} ${d.published}</span>
-            <span style="display:inline-flex;align-items:center;gap:4px">${clockIcon}${t("card_closes")} ${d.deadline}</span>`;
-        }
-        const tagsEl = slide.querySelector(".c-tags");
-        if (tagsEl) {
-          tagsEl.innerHTML = t(d.tags).split(",").map((tg) => `<span class="c-tag">${tg.trim()}</span>`).join("");
-        }
-        const track = slide.querySelector(".cc-track");
-        if (track && CAROUSEL_COMMENTS[i]) {
-          track.innerHTML = CAROUSEL_COMMENTS[i]
-            .map((c) => `<span class="cc-item"><b>${c.n}:</b> ${c[ccKey as "zh" | "tw" | "en"]}</span>`)
-            .join("");
-        }
-      });
+      const coinIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.8" style="flex-shrink:0"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>`;
+      const usersIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>`;
+      const clockIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
+
+      if (dbSurveys.length > 0) {
+        const top5 = dbSurveys.slice(0, 5);
+        slides.forEach((slide, i) => {
+          const s = top5[i];
+          if (!s) return;
+          (slide as HTMLElement).dataset.surveyId = String(s.id);
+          const titleText = langRef.current === "zh-TW" ? (s.title_zh_tw ?? s.title_zh_cn) :
+                            langRef.current === "en"    ? (s.title_en    ?? s.title_zh_cn) : s.title_zh_cn;
+          const title = slide.querySelector(".c-title");
+          if (title) title.textContent = titleText;
+          const meta = slide.querySelector(".c-meta");
+          if (meta) {
+            meta.innerHTML = `
+              <span style="display:inline-flex;align-items:center;gap:4px">${coinIcon}<b style="font-family:var(--font-fira-code),monospace;color:var(--blue)">${fmt(s.pool)}</b><span>${t("carousel_pool")}</span></span>
+              <span style="display:inline-flex;align-items:center;gap:4px">${usersIcon}${fmt(s.parts)} ${t("carousel_participants")}</span>
+              <span>${t("card_published")} ${s.pub_date}</span>
+              <span style="display:inline-flex;align-items:center;gap:4px">${clockIcon}${t("card_closes")} ${s.deadline_date}</span>`;
+          }
+          const tagsEl = slide.querySelector(".c-tags");
+          if (tagsEl) tagsEl.innerHTML = s.tags.map((tg) => `<span class="c-tag">${tg}</span>`).join("");
+          const noPct = 100 - s.yes_pct;
+          const yesOdds = (100 / s.yes_pct).toFixed(2);
+          const noOdds = (100 / noPct).toFixed(2);
+          // overlay
+          const coYes = slide.querySelector(".co-val.y");
+          const coNo = slide.querySelector(".co-val.n");
+          if (coYes) coYes.textContent = `${s.yes_pct}% (${yesOdds}x)`;
+          if (coNo) coNo.textContent = `${noPct}% (${noOdds}x)`;
+          // vote bars
+          const yPct = slide.querySelector(".v-pct.y");
+          const nPct = slide.querySelector(".v-pct.n");
+          const vOpts = slide.querySelectorAll(".v-opt");
+          const yOddsEl = vOpts[0]?.querySelector(".v-odds");
+          const nOddsEl = vOpts[1]?.querySelector(".v-odds");
+          const yFill = vOpts[0]?.querySelector(".v-fill.y") as HTMLElement | null;
+          const nFill = vOpts[1]?.querySelector(".v-fill.n") as HTMLElement | null;
+          if (yPct) yPct.textContent = `${s.yes_pct}%`;
+          if (nPct) nPct.textContent = `${noPct}%`;
+          if (yOddsEl) yOddsEl.textContent = `×${yesOdds}`;
+          if (nOddsEl) nOddsEl.textContent = `×${noOdds}`;
+          if (yFill) yFill.style.width = `${s.yes_pct}%`;
+          if (nFill) nFill.style.width = `${noPct}%`;
+        });
+        return;
+      }
+
+      // No static fallback — carousel stays empty until DB data loads
     }
 
     // ── 侧栏：最新 / 热门调研列表 ──
     function renderSideSurveys() {
-      const mkList = (arr: typeof LATEST_SURVEYS) =>
-        arr
-          .map(
-            (d) => `
-        <div class="side-survey">
-          <div class="side-ttl">${t(d.key)}</div>
-          <div class="side-opts">
-            <div class="s-opt y"><span class="so-lbl">YES</span><span class="so-pct">${d.y}%</span><span class="so-odds">${d.oY}x</span></div>
-            <div class="s-opt n"><span class="so-lbl">NO</span><span class="so-pct">${100 - d.y}%</span><span class="so-odds">${d.oN}x</span></div>
-          </div>
-        </div>`,
-          )
-          .join("");
-      const latest = document.getElementById("latestList");
-      const hot = document.getElementById("hotList");
-      if (latest) latest.innerHTML = mkList(LATEST_SURVEYS);
-      if (hot) hot.innerHTML = mkList(HOT_SURVEYS);
+      const attachClicks = (container: HTMLElement | null) => {
+        container?.querySelectorAll<HTMLElement>(".side-survey[data-id]").forEach((el) => {
+          el.addEventListener("click", () => { window.location.href = `/survey/${el.dataset.id}`; });
+        });
+      };
+
+      if (dbSurveys.length > 0) {
+        const mkDBItem = (s: Survey) => {
+          const noPct = 100 - s.yes_pct;
+          const yesOdds = (100 / s.yes_pct).toFixed(2);
+          const noOdds = (100 / noPct).toFixed(2);
+          const titleText = langRef.current === "zh-TW" ? (s.title_zh_tw ?? s.title_zh_cn) :
+                            langRef.current === "en"    ? (s.title_en    ?? s.title_zh_cn) : s.title_zh_cn;
+          return `<div class="side-survey" data-id="${s.id}" style="cursor:pointer">
+            <div class="side-ttl">${titleText}</div>
+            <div class="side-opts">
+              <div class="s-opt y"><span class="so-lbl">YES</span><span class="so-pct">${s.yes_pct}%</span><span class="so-odds">${yesOdds}x</span></div>
+              <div class="s-opt n"><span class="so-lbl">NO</span><span class="so-pct">${noPct}%</span><span class="so-odds">${noOdds}x</span></div>
+            </div>
+          </div>`;
+        };
+        const byNewest = [...dbSurveys].sort((a, b) => new Date(b.pub_date).getTime() - new Date(a.pub_date).getTime()).slice(0, 5);
+        const byPool = dbSurveys.slice(0, 5); // already sorted by pool desc
+        const latest = document.getElementById("latestList");
+        const hot = document.getElementById("hotList");
+        if (latest) { latest.innerHTML = byNewest.map(mkDBItem).join(""); attachClicks(latest); }
+        if (hot)    { hot.innerHTML    = byPool.map(mkDBItem).join("");    attachClicks(hot); }
+        return;
+      }
+
+      // No static fallback — leave empty until DB data arrives
     }
 
     // ── 顶部跑马灯：中奖播报 ──
@@ -250,43 +270,43 @@ export function OraMarketHome() {
         .join("");
     }
 
-    // ── 预测卡片（无限滚动）──
-    function mkCard(d: PredictionCard) {
+    // ── 预测卡片（无限滚动，使用 DB 数据）──
+    function mkCardFromDB(s: Survey) {
       const div = document.createElement("div");
       div.className = "pred-card";
-      // 点击卡片跳转到调研详情页
       div.style.cursor = "pointer";
-      div.addEventListener("click", () => {
-        window.location.href = `/survey/${d.id}`;
-      });
-      div.style.animationDelay = (d.id % PER_PAGE) * 20 + "ms";
-      const avs = AV_COLORS.slice(0, 3)
-        .map((c, i) => `<div class="av" style="background:${c}">${String.fromCharCode(65 + i)}</div>`)
-        .join("");
-      const topics = getTopics();
-      const titles = getTitles();
-      const cardTitle = titles[d.titleIdx] || titles[0];
-      const tags = d.tagIndices.map((idx) => `<span class="pc-tag">${topics[idx] || topics[0]}</span>`).join("");
+      div.addEventListener("click", () => { window.location.href = `/survey/${s.id}`; });
+      div.style.animationDelay = (s.id % PER_PAGE) * 20 + "ms";
+      const noPct = 100 - s.yes_pct;
+      const yesOdds = (100 / s.yes_pct).toFixed(2);
+      const noOdds = (100 / noPct).toFixed(2);
+      const avs = AV_COLORS.slice(0, 3).map((c, i) => `<div class="av" style="background:${c}">${String.fromCharCode(65 + i)}</div>`).join("");
+      const titleText = langRef.current === "zh-TW" ? (s.title_zh_tw ?? s.title_zh_cn) :
+                        langRef.current === "en"    ? (s.title_en    ?? s.title_zh_cn) : s.title_zh_cn;
+      const tags = s.tags.map((tag) => `<span class="pc-tag">${tag}</span>`).join("");
       div.innerHTML = `
-        <div class="pc-title">${cardTitle}</div>
+        <div class="pc-title">${titleText}</div>
         <div class="pc-pool">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>
-          <span class="pc-pool-n">${fmt(d.pool)}</span><span class="pc-pool-l">${t("card_pts_pool")}</span>
+          <span class="pc-pool-n">${fmt(s.pool)}</span><span class="pc-pool-l">${t("card_pts_pool")}</span>
         </div>
         <div class="pc-vote">
-          <div class="pc-vrow"><div class="pc-vlbl"><span class="pc-vtag y">YES</span><span class="pc-vodds">×${d.yesOdds}</span></div><span class="pc-vpct y">${d.yesPct}%</span></div>
-          <div class="pc-bar"><div class="pc-bary" style="width:${d.yesPct}%"></div></div>
-          <div class="pc-vrow" style="margin-top:3px"><div class="pc-vlbl"><span class="pc-vtag n">NO</span><span class="pc-vodds">×${d.noOdds}</span></div><span class="pc-vpct n">${d.noPct}%</span></div>
+          <div class="pc-vrow"><div class="pc-vlbl"><span class="pc-vtag y">YES</span><span class="pc-vodds">×${yesOdds}</span></div><span class="pc-vpct y">${s.yes_pct}%</span></div>
+          <div class="pc-bar"><div class="pc-bary" style="width:${s.yes_pct}%"></div></div>
+          <div class="pc-vrow" style="margin-top:3px"><div class="pc-vlbl"><span class="pc-vtag n">NO</span><span class="pc-vodds">×${noOdds}</span></div><span class="pc-vpct n">${noPct}%</span></div>
         </div>
-        <div class="pc-parts"><div class="av-stack">${avs}</div><span class="pc-cnt">${fmt(d.parts)} ${t("card_joined")}</span></div>
+        <div class="pc-parts"><div class="av-stack">${avs}</div><span class="pc-cnt">${fmt(s.parts)} ${t("card_joined")}</span></div>
         <div class="pc-tags">${tags}</div>
-        <div class="pc-foot"><span class="pc-pub">${t("card_published")}: ${d.pub}</span><span class="pc-dl">${t("card_closes")}: ${d.dl}</span></div>`;
+        <div class="pc-foot"><span class="pc-pub">${t("card_published")}: ${s.pub_date}</span><span class="pc-dl">${t("card_closes")}: ${s.deadline_date}</span></div>`;
       return div;
     }
+
     function loadPage() {
       if (busy) return;
+      if (dbSurveys.length === 0) return;
+      const filtered = getFilteredSurveys();
       const start = page * PER_PAGE;
-      const total = CARDS.length;
+      const total = filtered.length;
       const allDone = document.getElementById("allDone");
       const loadInd = document.getElementById("loadInd");
       if (start >= total) {
@@ -298,7 +318,9 @@ export function OraMarketHome() {
       if (loadInd) loadInd.style.display = "block";
       setTimeout(() => {
         const grid = document.getElementById("cardGrid");
-        if (grid) CARDS.slice(start, start + PER_PAGE).forEach((d) => grid.appendChild(mkCard(d)));
+        if (grid) {
+          filtered.slice(start, start + PER_PAGE).forEach((s) => grid.appendChild(mkCardFromDB(s)));
+        }
         page++;
         busy = false;
         if (loadInd) loadInd.style.display = "none";
@@ -325,8 +347,8 @@ export function OraMarketHome() {
         const svg = el.querySelector("svg");
         if (svg) {
           const clone = svg.cloneNode(true);
-          el.textContent = val + " ";
-          el.appendChild(clone);
+          el.textContent = val;
+          el.insertBefore(clone, el.firstChild);
         } else {
           el.textContent = val;
         }
@@ -349,39 +371,43 @@ export function OraMarketHome() {
       reloadCards();
     }
 
-    // ── 首页筛选标签（带调研数量）──
+    // ── 首页筛选标签（按调研 tags 字段出现频率动态生成，取 top 7）──
+    function getTopTags(n: number): string[] {
+      const freq = new Map<string, number>();
+      dbSurveys.forEach((s) => s.tags.forEach((tag) => freq.set(tag, (freq.get(tag) ?? 0) + 1)));
+      return [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([tag]) => tag);
+    }
+
+    function getFilteredSurveys(): Survey[] {
+      const row = document.getElementById("filterRow");
+      const activeTag = row?.dataset.active || "";
+      if (!activeTag) return dbSurveys;
+      return dbSurveys.filter((s) => s.tags.includes(activeTag));
+    }
+
     function renderFilterTags() {
       const row = document.getElementById("filterRow");
       if (!row) return;
-      // 标签配置：i18n key → filter key（对应 FILTER_COUNTS）
-      const FILTER_TAGS = [
-        { i18n: "filter_all",        key: "all" },
-        { i18n: "filter_healthcare", key: "healthcare" },
-        { i18n: "filter_education",  key: "education" },
-        { i18n: "filter_climate",    key: "climate" },
-        { i18n: "filter_tax",        key: "tax" },
-        { i18n: "filter_infra",      key: "infra" },
-        { i18n: "filter_digital",    key: "digital" },
-        { i18n: "filter_safety",     key: "safety" },
-        { i18n: "filter_housing",    key: "housing" },
+      const activeTag = row.dataset.active || "";
+      const topTags = getTopTags(7);
+      const chips = [
+        { label: "全部", tag: "" },
+        ...topTags.map((tag) => ({ label: tag, tag })),
       ];
-      const activeKey = row.dataset.active || "all";
-      row.innerHTML = FILTER_TAGS.map(({ i18n, key }) => {
-        const label = t(i18n);
-        const count = FILTER_COUNTS[key] ?? 0;
-        const isActive = activeKey === key;
-        // 数量徽章：与公共服务分类页左侧标签一致的小圆角药丸样式（非括号）
+      row.innerHTML = chips.map(({ label, tag }) => {
+        const count = tag ? dbSurveys.filter((s) => s.tags.includes(tag)).length : dbSurveys.length;
+        const isActive = activeTag === tag;
         const badgeStyle = isActive
           ? "background:rgba(255,255,255,.22);color:#fff"
           : "background:rgba(0,0,0,.05);color:var(--muted)";
         const badge = `<span style="margin-left:5px;font-size:11px;font-family:var(--font-fira-code),monospace;padding:1px 6px;border-radius:4px;${badgeStyle}">${count}</span>`;
-        return `<button class="f-tag${isActive ? " active" : ""}" data-filter="${key}">${label}${badge}</button>`;
+        return `<button class="f-tag${isActive ? " active" : ""}" data-filter="${tag}">${label}${badge}</button>`;
       }).join("");
-      // 点击重新渲染（更新 active 状态）
       row.querySelectorAll(".f-tag").forEach((btn) => {
         btn.addEventListener("click", function (this: HTMLElement) {
-          row.dataset.active = this.dataset.filter || "all";
+          row.dataset.active = this.dataset.filter || "";
           renderFilterTags();
+          reloadCards();
         });
       });
     }
@@ -504,17 +530,14 @@ export function OraMarketHome() {
       b.addEventListener("click", function (this: HTMLElement) {
         document.querySelectorAll(".nitem").forEach((x) => x.classList.remove("active"));
         this.classList.add("active");
-        const route = NAV_ROUTES[this.getAttribute("data-i18n") || ""];
+        const route = NAV_ROUTES[this.getAttribute("data-i18n") || this.getAttribute("data-nav") || ""];
         if (route) window.location.href = route;
       });
     });
-    // 筛选标签高亮（首页标签带数量，由 applyI18n 渲染，此处只做事件委托）
-    document.getElementById("filterRow")?.addEventListener("click", function (e) {
-      const btn = (e.target as HTMLElement).closest(".f-tag") as HTMLElement | null;
-      if (!btn) return;
-      document.querySelectorAll(".f-tag").forEach((x) => x.classList.remove("active"));
-      btn.classList.add("active");
-    });
+    // 筛选标签的高亮与数量徽章统一由 renderFilterTags() 在重渲染时设置
+    // （根据 data-active 决定 .active 类与徽章配色）。
+    // 此处不再附加事件委托——之前的委托会在重渲染后把 renderFilterTags 刚加上的
+    // .active 类移除，导致激活项失去蓝色高亮、白色数字落在白底上而“消失”。
     // 轮播左右箭头（第一个为上一张，第二个为下一张）
     const navBtns = document.querySelectorAll(".c-btn");
     navBtns[0]?.addEventListener("click", cPrev);
@@ -539,6 +562,10 @@ export function OraMarketHome() {
         renderLB();
       }),
     );
+    // 侧栏"查看全部"按钮
+    document.getElementById("latestMore")?.addEventListener("click", () => { window.location.href = "/latest"; });
+    document.getElementById("hotMore")?.addEventListener("click", () => { window.location.href = "/trending"; });
+
     // 语言切换：写入上下文（会持久化并触发重新应用 i18n）
     const langSelect = document.getElementById("langSelect") as HTMLSelectElement | null;
     langSelect?.addEventListener("change", function () {
@@ -549,6 +576,27 @@ export function OraMarketHome() {
     const sentinel = document.getElementById("sentinel");
     const observer = new IntersectionObserver((e) => { if (e[0].isIntersecting) loadPage(); }, { rootMargin: "300px" });
     if (sentinel) observer.observe(sentinel);
+
+    // ── DB 数据获取：用真实数据替换静态/PRNG 数据 ──
+    fetch("/api/surveys/list?limit=200&sort=pool")
+      .then((r) => r.json())
+      .then((json: { data?: Survey[] }) => {
+        dbSurveys = json.data ?? [];
+        if (dbSurveys.length === 0) return;
+        updateCarouselI18n();
+        // 为轮播幻灯片绑定点击跳转
+        document.querySelectorAll<HTMLElement>(".c-slide[data-survey-id]").forEach((slide) => {
+          slide.style.cursor = "pointer";
+          slide.addEventListener("click", (e) => {
+            if ((e.target as HTMLElement).closest(".c-btn, .c-dot")) return;
+            if (slide.dataset.surveyId) window.location.href = `/survey/${slide.dataset.surveyId}`;
+          });
+        });
+        renderSideSurveys();
+        renderFilterTags();
+        reloadCards();
+      })
+      .catch(() => {});
 
     // ── 卸载清理 ──
     return () => {
@@ -576,11 +624,8 @@ export function OraMarketHome() {
       {/* ══ NAV ══ */}
       <nav className="mnav">
         <div className="n-inner">
-          <button className="nitem hot active" data-i18n="nav_trending">
-            <svg viewBox="0 0 24 24">
-              <path d="M17.66 11.2c-.23-.3-.51-.56-.77-.82-.67-.6-1.43-1.03-2.07-1.66C13.33 7.26 13 4.85 13.95 3c-.95.23-1.78.75-2.49 1.32-2.59 2.04-3.49 5.56-2.46 8.73.04.14.08.27.08.42 0 .28-.18.52-.46.62-.27.1-.56.01-.74-.21a5.27 5.27 0 01-.88-2.31c-1.12 1.52-1.68 3.48-1.49 5.47.12 1.22.57 2.41 1.29 3.39.81 1.08 1.91 1.87 3.17 2.27 1.41.44 2.97.41 4.37-.06 1.6-.54 2.94-1.69 3.67-3.21.78-1.61.87-3.51.18-5.19-.23-.57-.56-1.09-.97-1.55z" />
-            </svg>
-            热门
+          <button className="nitem hot active" data-nav="nav_trending">
+            <span data-i18n="nav_trending">热门</span>
           </button>
           <button className="nitem" data-i18n="nav_latest">最新</button>
           <div className="n-div"></div>
@@ -684,7 +729,7 @@ export function OraMarketHome() {
                   <button className="c-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="15 18 9 12 15 6" /></svg></button>
                   <button className="c-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5"><polyline points="9 18 15 12 9 6" /></svg></button>
                 </div>
-                {SLIDES.map((s, i) => (
+                {[0,1,2,3,4].map((i) => (
                   <div className={"c-slide" + (i === 0 ? " active" : "")} id={"cs" + i} key={i}>
                     <div className="c-info">
                       <div className="c-title"></div>
@@ -694,20 +739,20 @@ export function OraMarketHome() {
                     <div className="c-body">
                       <div className="c-votes">
                         <div className="v-opt">
-                          <div className="v-row"><span className="v-lbl y">YES</span><span className="v-pct y">{s.y}%</span></div>
-                          <div className="v-odds">×{s.yo}</div>
-                          <div className="v-bar"><div className="v-fill y" style={{ width: `${s.y}%` }}></div></div>
+                          <div className="v-row"><span className="v-lbl y">YES</span><span className="v-pct y"></span></div>
+                          <div className="v-odds"></div>
+                          <div className="v-bar"><div className="v-fill y" style={{ width: "0%" }}></div></div>
                         </div>
                         <div className="v-opt">
-                          <div className="v-row"><span className="v-lbl n">NO</span><span className="v-pct n">{s.n}%</span></div>
-                          <div className="v-odds">×{s.no}</div>
-                          <div className="v-bar"><div className="v-fill n" style={{ width: `${s.n}%` }}></div></div>
+                          <div className="v-row"><span className="v-lbl n">NO</span><span className="v-pct n"></span></div>
+                          <div className="v-odds"></div>
+                          <div className="v-bar"><div className="v-fill n" style={{ width: "0%" }}></div></div>
                         </div>
                       </div>
                       <div className="chart-col">
                         <div className="chart-overlay">
-                          <div className="chart-overlay-row"><span className="co-lbl y">YES</span><span className="co-val y">{s.y}% ({s.yo}x)</span></div>
-                          <div className="chart-overlay-row"><span className="co-lbl n">NO</span><span className="co-val n">{s.n}% ({s.no}x)</span></div>
+                          <div className="chart-overlay-row"><span className="co-lbl y">YES</span><span className="co-val y"></span></div>
+                          <div className="chart-overlay-row"><span className="co-lbl n">NO</span><span className="co-val n"></span></div>
                         </div>
                         <div className="c-trend"><canvas id={"ctrend" + i}></canvas></div>
                       </div>
@@ -717,7 +762,7 @@ export function OraMarketHome() {
                 ))}
                 {/* Dots */}
                 <div className="c-dots" id="cDots">
-                  {SLIDES.map((_, i) => (
+                  {[0,1,2,3,4].map((i) => (
                     <button className={"c-dot" + (i === 0 ? " active" : "")} key={i}></button>
                   ))}
                 </div>
@@ -729,11 +774,11 @@ export function OraMarketHome() {
             {/* 右：最新 + 热门 */}
             <div className="feat-sidebar">
               <div className="s-panel">
-                <div className="p-head"><span className="p-title" data-i18n="panel_latest">最新预测</span><span className="p-more" data-i18n="view_all">查看全部 ›</span></div>
+                <div className="p-head"><span className="p-title" data-i18n="panel_latest">最新预测</span><span id="latestMore" className="p-more" data-i18n="view_all" style={{cursor:"pointer"}}>查看全部 ›</span></div>
                 <div className="side-list" id="latestList"></div>
               </div>
               <div className="s-panel">
-                <div className="p-head"><span className="p-title" data-i18n="panel_hot_topics">热门话题</span><span className="p-more" data-i18n="view_all">查看全部 ›</span></div>
+                <div className="p-head"><span className="p-title" data-i18n="panel_hot_topics">热门话题</span><span id="hotMore" className="p-more" data-i18n="view_all" style={{cursor:"pointer"}}>查看全部 ›</span></div>
                 <div className="side-list" id="hotList"></div>
               </div>
             </div>
@@ -749,7 +794,7 @@ export function OraMarketHome() {
             <div>
               <div className="sec-title" data-i18n="sec_all_predictions">所有预测</div>
               {/* 筛选标签行：由 renderFilterTags() 动态注入（含调研数量） */}
-              <div className="filter-row" id="filterRow" data-active="all"></div>
+              <div className="filter-row" id="filterRow" data-active=""></div>
               <div className="card-grid" id="cardGrid"></div>
               <div className="load-ind" id="loadInd"><div className="spinner"></div></div>
               <div className="load-ind" id="allDone" style={{ display: "none" }} data-i18n="all_loaded">— 所有预测已加载 —</div>

@@ -49,7 +49,7 @@ export function SurveyDetail({ id }: SurveyDetailProps) {
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <polyline points="15 18 9 12 15 6" />
           </svg>
-          返回调研市场
+          返回
         </button>
 
         {/* 详情主体 */}
